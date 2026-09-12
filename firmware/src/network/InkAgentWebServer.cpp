@@ -1167,11 +1167,11 @@ void InkAgentWebServer::handleSetWallpaper() const {
   lower.toLowerCase();
   const bool isImage = lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png") || lower.endsWith(".bmp");
   if (!isImage) {
-    server->send(400, "text/plain", "Not an image (use JPG, PNG or BMP)");
+    server->send(400, "text/plain", String("Not an image (use JPG, PNG or BMP): ") + path);
     return;
   }
   if (!Storage.exists(path.c_str())) {
-    server->send(404, "text/plain", "Image not found");
+    server->send(404, "text/plain", String("Image not found at: ") + path);
     return;
   }
   if (!Storage.writeFile("/.inkagent/wallpaper.txt", path)) {
