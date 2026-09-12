@@ -210,6 +210,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     sleepScreenValues[InkAgentSettings::BLANK] = StrId::STR_NONE_OPT;
     sleepScreenValues[InkAgentSettings::QUICK_RESUME] = StrId::STR_QUICK_RESUME;
     sleepScreenValues[InkAgentSettings::TRANSPARENT_CUSTOM] = StrId::STR_TRANSPARENT;
+    sleepScreenValues[InkAgentSettings::LOCK] = StrId::STR_LOCK_SCREEN;
 
     std::vector<StrId> statusBarClockValues(InkAgentSettings::STATUS_BAR_CLOCK_MODE_COUNT);
     statusBarClockValues[InkAgentSettings::STATUS_BAR_CLOCK_HIDE] = StrId::STR_HIDE;

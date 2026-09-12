@@ -540,6 +540,8 @@ void SleepActivity::onEnter() {
   }
 
   switch (SETTINGS.sleepScreen) {
+    case (InkAgentSettings::SLEEP_SCREEN_MODE::LOCK):
+      return renderLockSleepScreen();
     case (InkAgentSettings::SLEEP_SCREEN_MODE::BLANK):
       return renderBlankSleepScreen();
     case (InkAgentSettings::SLEEP_SCREEN_MODE::CUSTOM):
@@ -606,6 +608,58 @@ void SleepActivity::renderCustomSleepScreen() const {
 // firmware's only clean refresh in normal operation is the single-pass 0xD7
 // sequence, used once for the sleep image. It never runs the multi-flash GC
 // waveform (0xF7) that FULL_REFRESH selects (#2471's blinking complaint).
+namespace {
+// A simple padlock built from primitives. `shackleLift` raises the arch (the
+// "open" transition frame). Drawn dark on a light ground.
+void drawPadlock(GfxRenderer& r, int cx, int cy, int w, int h, int shackleLift) {
+  const int bodyW = w, bodyH = h;
+  const int bodyX = cx - bodyW / 2, bodyY = cy - bodyH / 2;
+  const int stroke = std::max(3, w / 12);
+  // Body
+  r.fillRect(bodyX, bodyY, bodyW, bodyH, true);
+  // Keyhole (light): a small round-ish hole + slot
+  const int khR = std::max(3, w / 10);
+  r.fillRect(cx - khR, bodyY + bodyH / 3 - khR, khR * 2, khR * 2, false);
+  r.fillRect(cx - stroke / 2, bodyY + bodyH / 3, stroke, bodyH / 3, false);
+  // Shackle: an inverted-U outline above the body, lifted by shackleLift.
+  const int shW = bodyW * 3 / 5;
+  const int shX = cx - shW / 2;
+  const int shTop = bodyY - shW / 2 - shackleLift;
+  const int shBottom = bodyY + stroke;  // overlap into the body when closed
+  r.drawLine(shX, shBottom, shX, shTop + shW / 2, stroke, true);                 // left post
+  r.drawLine(shX + shW, shBottom, shX + shW, shTop + shW / 2, stroke, true);     // right post
+  r.drawLine(shX, shTop + shW / 2, shX + shW, shTop + shW / 2, stroke, true);    // top bar (flat arch)
+}
+}  // namespace
+
+void SleepActivity::renderLockSleepScreen() const {
+  const int pageWidth = renderer.getScreenWidth();
+  const int pageHeight = renderer.getScreenHeight();
+  const int cx = pageWidth / 2;
+  const int lockCy = pageHeight / 2 - 20;
+  const int lockW = pageWidth / 4;
+  const int lockH = lockW;
+
+  // Wallpaper: a light ground with a thin inner frame border.
+  auto paintBase = [&]() {
+    renderer.clearScreen();
+    const int m = 24;
+    renderer.drawRect(m, m, pageWidth - 2 * m, pageHeight - 2 * m, 2, true);
+    renderer.drawCenteredText(UI_10_FONT_ID, m + 24, tr(STR_INKAGENT), true, EpdFontFamily::BOLD);
+  };
+
+  // Frame 1: open padlock (short lock transition).
+  paintBase();
+  drawPadlock(renderer, cx, lockCy, lockW, lockH, lockW / 3);
+  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+
+  // Frame 2 (retained): closed padlock + unlock hint.
+  paintBase();
+  drawPadlock(renderer, cx, lockCy, lockW, lockH, 0);
+  renderer.drawCenteredText(UI_12_FONT_ID, lockCy + lockH / 2 + 44, tr(STR_UNLOCK_HINT), true, EpdFontFamily::BOLD);
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+}
+
 void SleepActivity::renderDefaultSleepScreen() const {
   const auto pageWidth = renderer.getScreenWidth();
   const auto pageHeight = renderer.getScreenHeight();

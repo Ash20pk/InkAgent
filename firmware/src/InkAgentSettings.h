@@ -22,6 +22,7 @@ class InkAgentSettings : public PersistableStore<InkAgentSettings> {
     BLANK = 5,
     QUICK_RESUME = 6,
     TRANSPARENT_CUSTOM = 7,
+    LOCK = 8,
     SLEEP_SCREEN_MODE_COUNT
   };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
@@ -198,7 +199,7 @@ class InkAgentSettings : public PersistableStore<InkAgentSettings> {
   };
 
   // Sleep screen settings
-  uint8_t sleepScreen = DARK;
+  uint8_t sleepScreen = LOCK;  // lock screen on timeout: wallpaper + unlock hint
   // Night mode: inverted output polarity, applied to every activity per
   // render by ActivityManager. The sleep screen opts out itself.
   uint8_t screenInverted = 0;
@@ -226,7 +227,7 @@ class InkAgentSettings : public PersistableStore<InkAgentSettings> {
   // Resetting to 0 (e.g. via the web UI) forces a re-sync on next WiFi connect.
   uint8_t clockHasBeenSynced = 0;
   // Text rendering settings
-  uint8_t extraParagraphSpacing = 1;
+  uint8_t extraParagraphSpacing = 0;  // default off: tighter paragraphs
   uint8_t textAntiAliasing = 1;
   // Short power button click behaviour
   uint8_t shortPwrBtn = GO_HOME;  // short power press opens Home; long press still sleeps
@@ -249,7 +250,7 @@ class InkAgentSettings : public PersistableStore<InkAgentSettings> {
   // are selectable; SdCardFontSystem::ensureLoaded() snaps this to the nearest
   // available size (and persists the snap) whenever the family changes.
   uint8_t fontPointSize = DEFAULT_FONT_POINT_SIZE;
-  uint8_t lineSpacing = NORMAL;
+  uint8_t lineSpacing = TIGHT;        // default tight: denser reading
   uint8_t paragraphAlignment = JUSTIFIED;
   // Auto-sleep timeout setting (default 10 minutes). Legacy sleepTimeout enum values are migration-only.
   uint8_t sleepTimeoutMinutes = 10;
