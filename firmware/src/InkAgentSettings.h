@@ -137,7 +137,8 @@ class InkAgentSettings : public PersistableStore<InkAgentSettings> {
     PAGE_TURN = 2,
     FORCE_REFRESH = 3,
     FOOTNOTES = 4,
-    PWR_CONFIRM = 5,
+    GO_HOME = 5,
+    PWR_CONFIRM = 6,
     SHORT_PWRBTN_COUNT
   };
 
@@ -228,7 +229,7 @@ class InkAgentSettings : public PersistableStore<InkAgentSettings> {
   uint8_t extraParagraphSpacing = 1;
   uint8_t textAntiAliasing = 1;
   // Short power button click behaviour
-  uint8_t shortPwrBtn = IGNORE;
+  uint8_t shortPwrBtn = GO_HOME;  // short power press opens Home; long press still sleeps
   // EPUB reading orientation settings
   // 0 = portrait (default), 1 = landscape clockwise, 2 = inverted, 3 = landscape counter-clockwise
   uint8_t orientation = PORTRAIT;

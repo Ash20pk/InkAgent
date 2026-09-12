@@ -754,6 +754,15 @@ void loop() {
   }
 #endif
 
+  // Short power press opens Home (long press still sleeps, handled above).
+  if (SETTINGS.shortPwrBtn == InkAgentSettings::SHORT_PWRBTN::GO_HOME &&
+      mappedInputManager.wasReleased(MappedInputManager::Button::Power)) {
+    if (!activityManager.isHomeActivity()) {
+      LOG_DBG("MAIN", "Power short-press -> Home");
+      Activity::onGoHome();
+    }
+    return;
+  }
   // Refresh screen when power button is short-pressed with FORCE_REFRESH setting.
   if (SETTINGS.shortPwrBtn == InkAgentSettings::SHORT_PWRBTN::FORCE_REFRESH &&
       mappedInputManager.wasReleased(MappedInputManager::Button::Power)) {
