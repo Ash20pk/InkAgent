@@ -35,6 +35,8 @@ namespace {
 
 // Kept separate from /sleep.bmp and /.sleep so alpha-overlay art does not mix with full-screen wallpapers.
 constexpr char TRANSPARENT_SLEEP_ROOT_BMP[] = "/sleep-overlay.bmp";
+// Path of the user-chosen lock-screen wallpaper (set from the web file manager).
+constexpr char LOCK_WALLPAPER_CONF[] = "/.inkagent/wallpaper.txt";
 constexpr char TRANSPARENT_SLEEP_ROOT_PNG[] = "/sleep-overlay.png";
 constexpr char TRANSPARENT_SLEEP_DIR[] = "/.sleep-overlay";
 constexpr char TRANSPARENT_SLEEP_LEGACY_DIR[] = "/sleep-overlay";
@@ -644,44 +646,44 @@ void SleepActivity::renderLockSleepScreen() const {
   // Wallpaper: /lock.{jpg,jpeg,png,bmp} on the SD root if present (drawn into
   // the framebuffer without flushing, so the padlock + hint overlay on top);
   // otherwise a light ground with a thin inner frame.
-  // Candidate wallpaper files on the SD root, in priority order. FAT is usually
-  // case-insensitive, but try upper-case too in case the driver is not.
-  static const char* const kWallpaperPaths[] = {"/lock.bmp", "/lock.jpg",  "/lock.jpeg", "/lock.png",
-                                                "/lock.JPG", "/lock.JPEG", "/lock.PNG",  "/lock.BMP"};
-  std::string wallpaperDiag;
+  // Wallpaper is whatever image the user picked in the web file manager
+  // ("Set as wallpaper"); its path lives in /.inkagent/wallpaper.txt. Drawn
+  // into the framebuffer without flushing so the padlock + hint overlay on top.
   auto drawWallpaper = [&]() -> bool {
-    bool anyFound = false;
-    for (const char* path : kWallpaperPaths) {
-      if (!Storage.exists(path)) continue;
-      anyFound = true;
-      const std::string p(path);
-      const bool isBmp = p.size() >= 4 && (p.compare(p.size() - 4, 4, ".bmp") == 0 || p.compare(p.size() - 4, 4, ".BMP") == 0);
-      if (isBmp) {
-        HalFile bmpFile;
-        if (Storage.openFileForRead("SLP", path, bmpFile)) {
-          Bitmap bmp(bmpFile, true, false);
-          const auto place = calculateBitmapPlacement(bmp.getWidth(), bmp.getHeight(), renderer);
-          const bool ok = bmp.parseHeaders() == BmpReaderError::Ok &&
-                          renderer.drawBitmap1Bit(bmp, place.x, place.y, pageWidth, pageHeight);
-          bmpFile.close();
-          if (ok) return true;
-        }
-      } else {
-        auto* decoder = ImageDecoderFactory::getDecoder(path);
-        RenderConfig cfg;
-        cfg.x = 0;
-        cfg.y = 0;
-        cfg.maxWidth = pageWidth;
-        cfg.maxHeight = pageHeight;
-        cfg.useGrayscale = true;
-        cfg.useDithering = true;
-        if (decoder && decoder->decodeToFramebuffer(path, renderer, cfg)) return true;
+    std::string path;
+    {
+      HalFile cfgFile;
+      if (Storage.openFileForRead("SLP", LOCK_WALLPAPER_CONF, cfgFile)) {
+        int c;
+        while ((c = cfgFile.read()) >= 0 && c != '\n' && c != '\r' && path.size() < 250) path += static_cast<char>(c);
+        cfgFile.close();
       }
-      renderer.clearScreen();  // a partial draw may have dirtied the buffer
-      wallpaperDiag = std::string(path) + " found but could not be shown";
-      LOG_ERR("SLP", "lock wallpaper failed: %s (free heap %u)", path, (unsigned)ESP.getFreeHeap());
     }
-    if (!anyFound) wallpaperDiag = "No wallpaper. Put lock.jpg on the SD card root.";
+    if (path.empty() || !Storage.exists(path.c_str())) return false;
+    std::string ext = path.substr(path.rfind('.') == std::string::npos ? path.size() : path.rfind('.'));
+    for (auto& ch : ext) ch = static_cast<char>(tolower(ch));
+    if (ext == ".bmp") {
+      HalFile bmpFile;
+      if (Storage.openFileForRead("SLP", path, bmpFile)) {
+        Bitmap bmp(bmpFile, true, false);
+        const auto place = calculateBitmapPlacement(bmp.getWidth(), bmp.getHeight(), renderer);
+        const bool ok = bmp.parseHeaders() == BmpReaderError::Ok &&
+                        renderer.drawBitmap1Bit(bmp, place.x, place.y, pageWidth, pageHeight);
+        bmpFile.close();
+        if (ok) return true;
+      }
+    } else if (auto* decoder = ImageDecoderFactory::getDecoder(path)) {
+      RenderConfig cfg;
+      cfg.x = 0;
+      cfg.y = 0;
+      cfg.maxWidth = pageWidth;
+      cfg.maxHeight = pageHeight;
+      cfg.useGrayscale = true;
+      cfg.useDithering = true;
+      if (decoder->decodeToFramebuffer(path, renderer, cfg)) return true;
+    }
+    LOG_ERR("SLP", "lock wallpaper failed: %s (free heap %u)", path.c_str(), (unsigned)ESP.getFreeHeap());
+    renderer.clearScreen();  // a partial draw may have dirtied the buffer
     return false;
   };
   auto paintBase = [&]() {
@@ -705,9 +707,6 @@ void SleepActivity::renderLockSleepScreen() const {
   renderer.fillRect(cx - plateW / 2, hintY - 8, plateW, plateH, false);   // clear a legible strip
   renderer.drawRect(cx - plateW / 2, hintY - 8, plateW, plateH, 1, true);
   renderer.drawCenteredText(UI_12_FONT_ID, hintY, tr(STR_UNLOCK_HINT), true, EpdFontFamily::BOLD);
-  if (!wallpaperDiag.empty()) {
-    renderer.drawCenteredText(UI_10_FONT_ID, pageHeight - 28, wallpaperDiag.c_str());
-  }
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 

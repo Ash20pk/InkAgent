@@ -2063,7 +2063,7 @@
           const fileIsImage = isImageFile(file.name);
           fileTableContent += `<td><span class="file-icon">${file.isEpub ? '📗' : (fileIsImage ? '🖼️' : '📄')}</span>`;
           if (fileIsImage) {
-            fileTableContent += `<a href="${downloadUrl(filePath)}" class="file-link image-preview-link">${escapeHtml(file.name)}</a>`;
+            fileTableContent += `<a href="${downloadUrl(filePath)}" data-path="${encodeURIComponent(filePath)}" class="file-link image-preview-link">${escapeHtml(file.name)}</a>`;
           } else {
             fileTableContent += `<a rel="noopener noreferrer" target="_blank" href="${downloadUrl(filePath)}" class="file-link">${escapeHtml(file.name)}</a>`;
           }
@@ -2093,13 +2093,32 @@
     return `/download?path=${encodeURIComponent(filePath)}`;
   }
 
-  function openImagePreview(url, name) {
+  let currentPreviewPath = '';
+  function openImagePreview(url, name, path) {
     const img = document.getElementById('imagePreviewImg');
     document.getElementById('imagePreviewName').textContent = name;
     img.src = url;
     img.alt = name;
     document.getElementById('imagePreviewDownload').href = url;
+    currentPreviewPath = path ? decodeURIComponent(path) : '';
+    document.getElementById('imagePreviewWallpaperStatus').textContent = '';
     document.getElementById('imagePreviewModal').classList.add('open');
+  }
+
+  async function setAsWallpaper() {
+    const status = document.getElementById('imagePreviewWallpaperStatus');
+    if (!currentPreviewPath) { status.textContent = 'No file selected'; return; }
+    status.textContent = 'Setting…';
+    try {
+      const res = await fetch('/api/wallpaper', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'path=' + encodeURIComponent(currentPreviewPath),
+      });
+      status.textContent = res.ok ? '✓ Set as lock wallpaper' : ('✗ ' + (await res.text()));
+    } catch (e) {
+      status.textContent = '✗ ' + e.message;
+    }
   }
 
   function closeImagePreview() {
@@ -2975,7 +2994,7 @@
       const link = e.target.closest('.image-preview-link');
       if (link) {
         e.preventDefault();
-        openImagePreview(link.getAttribute('href'), link.textContent);
+        openImagePreview(link.getAttribute('href'), link.textContent, link.getAttribute('data-path'));
         return;
       }
       const btn = e.target.closest('[data-action]');

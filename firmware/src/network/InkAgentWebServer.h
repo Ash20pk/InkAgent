@@ -102,6 +102,7 @@ class InkAgentWebServer {
   void handleRename() const;
   void handleMove() const;
   void handleDelete() const;
+  void handleSetWallpaper() const;
 
   // Settings handlers
   void handleSettingsPage() const;

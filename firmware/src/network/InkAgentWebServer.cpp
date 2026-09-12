@@ -163,6 +163,7 @@ void InkAgentWebServer::begin() {
 
   // Delete file/folder endpoint
   server->on("/delete", HTTP_POST, [this] { handleDelete(); });
+  server->on("/api/wallpaper", HTTP_POST, [this] { handleSetWallpaper(); });
 
   // Settings endpoints
   server->on("/settings", HTTP_GET, [this] { handleSettingsPage(); });
@@ -1151,6 +1152,33 @@ void InkAgentWebServer::handleDelete() const {
   } else {
     server->send(500, "text/plain", "Failed to delete some items: " + failedItems);
   }
+}
+
+// Records (or clears) the lock-screen wallpaper chosen from the file manager.
+// Stores the image path in /.inkagent/wallpaper.txt; SleepActivity reads it.
+void InkAgentWebServer::handleSetWallpaper() const {
+  const String path = normalizeWebPath(server->arg("path"));
+  if (server->hasArg("clear") || path.isEmpty()) {
+    Storage.remove("/.inkagent/wallpaper.txt");
+    server->send(200, "text/plain", "Wallpaper cleared");
+    return;
+  }
+  String lower = path;
+  lower.toLowerCase();
+  const bool isImage = lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png") || lower.endsWith(".bmp");
+  if (!isImage) {
+    server->send(400, "text/plain", "Not an image (use JPG, PNG or BMP)");
+    return;
+  }
+  if (!Storage.exists(path.c_str())) {
+    server->send(404, "text/plain", "Image not found");
+    return;
+  }
+  if (!Storage.writeFile("/.inkagent/wallpaper.txt", path)) {
+    server->send(500, "text/plain", "Could not save wallpaper choice");
+    return;
+  }
+  server->send(200, "text/plain", "Wallpaper set");
 }
 
 void InkAgentWebServer::handleSettingsPage() const {
