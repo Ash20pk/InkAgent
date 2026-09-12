@@ -640,9 +640,23 @@ void SleepActivity::renderLockSleepScreen() const {
   const int lockW = pageWidth / 4;
   const int lockH = lockW;
 
-  // Wallpaper: a light ground with a thin inner frame border.
+  // Wallpaper: a user BMP at /lock.bmp if present, else a light ground with a
+  // thin inner frame. Drawn 1-bit (no flush) so the padlock + hint overlay on top.
   auto paintBase = [&]() {
     renderer.clearScreen();
+    HalFile wp;
+    if (Storage.openFileForRead("SLP", "/lock.bmp", wp)) {
+      Bitmap bmp(wp, true, false);
+      if (bmp.parseHeaders() == BmpReaderError::Ok) {
+        const auto place = calculateBitmapPlacement(bmp.getWidth(), bmp.getHeight(), renderer);
+        if (renderer.drawBitmap1Bit(bmp, place.x, place.y, pageWidth, pageHeight)) {
+          wp.close();
+          return;  // wallpaper drawn; overlay follows
+        }
+      }
+      wp.close();
+      renderer.clearScreen();
+    }
     const int m = 24;
     renderer.drawRect(m, m, pageWidth - 2 * m, pageHeight - 2 * m, 2, true);
     renderer.drawCenteredText(UI_10_FONT_ID, m + 24, tr(STR_INKAGENT), true, EpdFontFamily::BOLD);
@@ -656,7 +670,12 @@ void SleepActivity::renderLockSleepScreen() const {
   // Frame 2 (retained): closed padlock + unlock hint.
   paintBase();
   drawPadlock(renderer, cx, lockCy, lockW, lockH, 0);
-  renderer.drawCenteredText(UI_12_FONT_ID, lockCy + lockH / 2 + 44, tr(STR_UNLOCK_HINT), true, EpdFontFamily::BOLD);
+  const int hintY = lockCy + lockH / 2 + 44;
+  const int plateH = renderer.getLineHeight(UI_12_FONT_ID) + 12;
+  const int plateW = renderer.getTextWidth(UI_12_FONT_ID, tr(STR_UNLOCK_HINT), EpdFontFamily::BOLD) + 28;
+  renderer.fillRect(cx - plateW / 2, hintY - 8, plateW, plateH, false);   // clear a legible strip
+  renderer.drawRect(cx - plateW / 2, hintY - 8, plateW, plateH, 1, true);
+  renderer.drawCenteredText(UI_12_FONT_ID, hintY, tr(STR_UNLOCK_HINT), true, EpdFontFamily::BOLD);
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 

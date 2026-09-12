@@ -63,6 +63,7 @@ uint8_t InkAgentSettings::sleepTimeoutEnumToMinutes(const uint8_t legacyValue) {
 
 void InkAgentSettings::toJson(JsonDocument& doc) const {
   const InkAgentSettings& s = *this;
+  doc["settingsRev"] = INKAGENT_SETTINGS_REV;
 
   for (const auto& info : getSettingsList()) {
     if (!info.key) continue;
@@ -231,6 +232,19 @@ bool InkAgentSettings::fromJson(JsonVariantConst doc) {
   // Absent means unconfigured, which is the default.
   if (doc["keyboardLayouts"].is<uint16_t>()) {
     keyboardLayouts = doc["keyboardLayouts"].as<uint16_t>();
+  }
+
+  // One-time migration: apply new shipped defaults over an older saved file so
+  // features like the Home power button and the lock screen turn on without the
+  // user re-toggling them. Runs once per rev; later user changes then persist.
+  const uint32_t savedRev = doc["settingsRev"] | 0u;
+  if (savedRev < INKAGENT_SETTINGS_REV) {
+    shortPwrBtn = GO_HOME;
+    lineSpacing = TIGHT;
+    extraParagraphSpacing = 0;
+    sleepScreen = LOCK;
+    needsResave = true;
+    LOG_INF("CPS", "Applied settings defaults migration to rev %u", (unsigned)INKAGENT_SETTINGS_REV);
   }
 
   if (needsResave) {

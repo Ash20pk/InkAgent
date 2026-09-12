@@ -5,6 +5,10 @@
 
 #include <cstdint>
 
+// Bump when shipping new default values that should override a user's saved
+// file once (see fromJson migration). rev 1: GO_HOME power, tight reading, lock screen.
+#define INKAGENT_SETTINGS_REV 1u
+
 class InkAgentSettings : public PersistableStore<InkAgentSettings> {
  private:
   // Private constructor for singleton
