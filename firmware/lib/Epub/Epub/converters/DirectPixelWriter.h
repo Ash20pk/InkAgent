@@ -97,6 +97,112 @@ struct DirectPixelWriter {
     }
   }
 
+  // Fold an EXIF image rotation into the transform, so callers keep emitting
+  // pixels in unrotated image order and land in the right place on screen.
+  //
+  // init() has already collapsed the screen orientation into
+  //   phy = base + logical * step
+  // and an EXIF transform is linear in the same way, so composing the two yields
+  // another transform of that shape and the decode loops need no changes.
+  // Callers pass logical coords offset by the placement origin (cfgX, cfgY);
+  // that offset is folded in here too.
+  //
+  // exif is the standard 1..8 tag value. 1 is the identity and returns early.
+  // dstW/dstH are the unrotated output dimensions; for exif >= 5 the image
+  // occupies dstH x dstW on screen.
+  void composeImageRotation(int exif, int cfgX, int cfgY, int dstW, int dstH) {
+    if (exif <= 1 || exif > 8) return;
+
+    // Screen-logical coords as an affine function of the caller's (outX, outY):
+    //   s = sBase + outX * sStepX + outY * sStepY
+    int sxBase, sxStepX, sxStepY;
+    int syBase, syStepX, syStepY;
+
+    // u = outX - cfgX and v = outY - cfgY are the image-space coords; the
+    // expressions below are those mappings rewritten in terms of outX/outY.
+    const int flipU = cfgX + dstW - 1 + cfgX;    // cfgX + (dstW-1-u) == flipU - outX
+    const int flipV = cfgY + dstH - 1 + cfgY;    // cfgY + (dstH-1-v) == flipV - outY
+    const int swapUtoY = cfgY - cfgX;            // cfgY + u == swapUtoY + outX
+    const int swapVtoX = cfgX - cfgY;            // cfgX + v == swapVtoX + outY
+    const int rotVtoX = cfgX + dstH - 1 + cfgY;  // cfgX + (dstH-1-v) == rotVtoX - outY
+    const int rotUtoY = cfgY + dstW - 1 + cfgX;  // cfgY + (dstW-1-u) == rotUtoY - outX
+
+    switch (exif) {
+      case 2:  // mirror horizontal
+        sxBase = flipU;
+        sxStepX = -1;
+        sxStepY = 0;
+        syBase = 0;
+        syStepX = 0;
+        syStepY = 1;
+        break;
+      case 3:  // rotate 180
+        sxBase = flipU;
+        sxStepX = -1;
+        sxStepY = 0;
+        syBase = flipV;
+        syStepX = 0;
+        syStepY = -1;
+        break;
+      case 4:  // mirror vertical
+        sxBase = 0;
+        sxStepX = 1;
+        sxStepY = 0;
+        syBase = flipV;
+        syStepX = 0;
+        syStepY = -1;
+        break;
+      case 5:  // transpose
+        sxBase = swapVtoX;
+        sxStepX = 0;
+        sxStepY = 1;
+        syBase = swapUtoY;
+        syStepX = 1;
+        syStepY = 0;
+        break;
+      case 6:  // rotate 90 clockwise
+        sxBase = rotVtoX;
+        sxStepX = 0;
+        sxStepY = -1;
+        syBase = swapUtoY;
+        syStepX = 1;
+        syStepY = 0;
+        break;
+      case 7:  // transverse
+        sxBase = rotVtoX;
+        sxStepX = 0;
+        sxStepY = -1;
+        syBase = rotUtoY;
+        syStepX = -1;
+        syStepY = 0;
+        break;
+      case 8:  // rotate 90 counter-clockwise
+        sxBase = swapVtoX;
+        sxStepX = 0;
+        sxStepY = 1;
+        syBase = rotUtoY;
+        syStepX = -1;
+        syStepY = 0;
+        break;
+      default:
+        return;
+    }
+
+    const int newXBase = phyXBase + sxBase * phyXStepX + syBase * phyXStepY;
+    const int newXStepX = sxStepX * phyXStepX + syStepX * phyXStepY;
+    const int newXStepY = sxStepY * phyXStepX + syStepY * phyXStepY;
+    const int newYBase = phyYBase + sxBase * phyYStepX + syBase * phyYStepY;
+    const int newYStepX = sxStepX * phyYStepX + syStepX * phyYStepY;
+    const int newYStepY = sxStepY * phyYStepX + syStepY * phyYStepY;
+
+    phyXBase = newXBase;
+    phyXStepX = newXStepX;
+    phyXStepY = newXStepY;
+    phyYBase = newYBase;
+    phyYStepX = newYStepX;
+    phyYStepY = newYStepY;
+  }
+
   // Call once per row before the column loop.
   // Pre-computes the Y-dependent portion so writePixel() only needs the X part.
   inline void beginRow(int logicalY) {

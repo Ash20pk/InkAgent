@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <new>
 
@@ -44,6 +45,16 @@ struct PngContext {
 
   uint8_t* grayLineBuffer{nullptr};
   uint8_t* alphaLineBuffer{nullptr};
+
+  // Box-filter accumulator, used only when downscaling vertically. PNGdec hands
+  // over one source scanline at a time, so source rows landing on the same output
+  // row are summed here and averaged on emit. Without it every such row but one
+  // is discarded, which aliases fine detail into noise the dither then amplifies.
+  uint32_t* rowAccumGray{nullptr};
+  uint32_t* rowAccumAlpha{nullptr};
+  int accumDstY{-1};
+  int accumRows{0};
+  bool boxFilter{false};
   uint32_t lastYieldMs{0};  // throttle state for yieldDuringDecode()
 };
 
@@ -212,6 +223,85 @@ void convertLineToGray(const uint8_t* pPixels, uint8_t* grayLine, int width, int
   }
 }
 
+// Average the accumulated box for one output row, then dither and write it.
+void emitAccumulatedRow(PngContext* ctx) {
+  const int rows = ctx->accumRows;
+  const int dstY = ctx->accumDstY;
+  ctx->accumRows = 0;
+  if (rows <= 0 || dstY < 0) return;
+
+  const int outY = ctx->config->y + dstY;
+  if (outY < 0 || outY >= ctx->screenHeight) return;
+
+  const bool useDithering = ctx->config->useDithering;
+  DirectPixelWriter pw;
+  pw.init(*ctx->renderer);
+  const bool bwTarget = pw.mode == GfxRenderer::BW && useDithering;
+  pw.beginRow(outY);
+
+  bool caching = ctx->caching;
+  DirectCacheWriter cw;
+  if (caching) {
+    if (!ctx->cache.advanceTo(dstY)) {
+      caching = false;
+      ctx->caching = false;
+    } else {
+      cw.init(ctx->cache.buffer, ctx->cache.bytesPerRow, ctx->cache.bandRows, ctx->cache.originX);
+      cw.beginRow(outY, ctx->config->y + ctx->cache.bandStart);
+    }
+  }
+  ctx->lastDstY = dstY;
+
+  for (int dstX = 0; dstX < ctx->dstWidth; dstX++) {
+    const int outX = ctx->config->x + dstX;
+    if (outX >= ctx->screenWidth) break;
+
+    const uint8_t alpha =
+        ctx->rowAccumAlpha ? static_cast<uint8_t>(ctx->rowAccumAlpha[dstX] / static_cast<uint32_t>(rows)) : 255;
+    if (alpha < 8 || alpha <= alphaThreshold4x4(outX, outY)) continue;
+
+    const uint8_t gray = static_cast<uint8_t>(ctx->rowAccumGray[dstX] / static_cast<uint32_t>(rows));
+    uint8_t ditheredGray;
+    if (useDithering) {
+      ditheredGray = applyBayerDither4Level(gray, outX, outY);
+    } else {
+      ditheredGray = gray / 85;
+      if (ditheredGray > 3) ditheredGray = 3;
+    }
+    pw.writePixel(outX, bwTarget ? applyBayerDither1Bit(gray, outX, outY) : ditheredGray,
+                  ctx->alphaLineBuffer != nullptr);
+    if (caching) cw.writePixel(outX, ditheredGray);
+  }
+}
+
+// Add the current decoded scanline to the accumulator, averaging horizontally
+// over the source columns that map onto each output column.
+void accumulateSourceRow(PngContext* ctx) {
+  const int dstWidth = ctx->dstWidth;
+  const int srcEndLimit = ctx->cropLeft + ctx->visibleWidth;
+
+  for (int dstX = 0; dstX < dstWidth; dstX++) {
+    int s0 = ctx->cropLeft + static_cast<int>((static_cast<int64_t>(dstX) * ctx->visibleWidth) / dstWidth);
+    int s1 = ctx->cropLeft + static_cast<int>((static_cast<int64_t>(dstX + 1) * ctx->visibleWidth) / dstWidth);
+    if (s1 <= s0) s1 = s0 + 1;
+    if (s1 > srcEndLimit) s1 = srcEndLimit;
+    if (s1 > ctx->srcWidth) s1 = ctx->srcWidth;
+    if (s0 >= s1) s0 = s1 - 1;
+    if (s0 < 0) continue;
+
+    uint32_t graySum = 0;
+    uint32_t alphaSum = 0;
+    for (int sx = s0; sx < s1; sx++) {
+      graySum += ctx->grayLineBuffer[sx];
+      if (ctx->alphaLineBuffer) alphaSum += ctx->alphaLineBuffer[sx];
+    }
+    const uint32_t n = static_cast<uint32_t>(s1 - s0);
+    ctx->rowAccumGray[dstX] += graySum / n;
+    if (ctx->rowAccumAlpha) ctx->rowAccumAlpha[dstX] += alphaSum / n;
+  }
+  ctx->accumRows++;
+}
+
 int pngDrawCallback(PNGDRAW* pDraw) {
   PngContext* ctx = reinterpret_cast<PngContext*>(pDraw->pUser);
   if (!ctx || !ctx->config || !ctx->renderer || !ctx->grayLineBuffer) return 0;
@@ -222,6 +312,29 @@ int pngDrawCallback(PNGDRAW* pDraw) {
   int srcWidth = ctx->srcWidth;
   if (srcY < ctx->cropTop || srcY >= ctx->cropTop + ctx->visibleHeight) return 1;
   const int visibleSrcY = srcY - ctx->cropTop;
+
+  // Vertical downscale: every source row contributes to the box accumulator, so
+  // this runs ahead of the row-skip logic below, which exists to drop duplicate
+  // rows for the point-sampled path and would discard the rows being averaged.
+  // The accumulated row is flushed when the next source row lands on a different
+  // output row, and after the final scanline by decodeToFramebuffer.
+  if (ctx->boxFilter) {
+    const uint32_t boxTransparent = ctx->decoder ? ctx->decoder->getTransparentColor() : 0;
+    convertLineToGray(pDraw->pPixels, ctx->grayLineBuffer, srcWidth, pDraw->iPixelType, pDraw->iBpp, pDraw->pPalette,
+                      pDraw->iHasAlpha, boxTransparent, ctx->alphaLineBuffer);
+
+    int dstY = static_cast<int>((static_cast<int64_t>(visibleSrcY) * ctx->dstHeight) / ctx->visibleHeight);
+    if (dstY >= ctx->dstHeight) dstY = ctx->dstHeight - 1;
+    if (dstY != ctx->accumDstY) {
+      emitAccumulatedRow(ctx);
+      memset(ctx->rowAccumGray, 0, sizeof(uint32_t) * static_cast<size_t>(ctx->dstWidth));
+      if (ctx->rowAccumAlpha) memset(ctx->rowAccumAlpha, 0, sizeof(uint32_t) * static_cast<size_t>(ctx->dstWidth));
+      ctx->accumDstY = dstY;
+      ctx->accumRows = 0;
+    }
+    accumulateSourceRow(ctx);
+    return 1;
+  }
 
   // Map source rows with the exact output-height ratio. During downscaling,
   // multiple source rows can select the same output row; during upscaling, one
@@ -253,6 +366,9 @@ int pngDrawCallback(PNGDRAW* pDraw) {
   // Pre-compute orientation and render-mode state once per callback.
   DirectPixelWriter pw;
   pw.init(*ctx->renderer);
+  // A 1-bit framebuffer needs the grey thresholded directly; the 4-level value is
+  // still what goes to the cache, which stores 2 bits per pixel.
+  const bool bwTarget = pw.mode == GfxRenderer::BW && useDithering;
 
   for (int dstY = firstDstY; dstY < endDstY; dstY++) {
     ctx->lastDstY = dstY;
@@ -294,7 +410,8 @@ int pngDrawCallback(PNGDRAW* pDraw) {
             ditheredGray = gray / 85;
             if (ditheredGray > 3) ditheredGray = 3;
           }
-          pw.writePixel(outX, ditheredGray, ctx->alphaLineBuffer != nullptr);
+          pw.writePixel(outX, bwTarget ? applyBayerDither1Bit(gray, outX, outY) : ditheredGray,
+                        ctx->alphaLineBuffer != nullptr);
           if (caching) cw.writePixel(outX, ditheredGray);
         }
       }
@@ -447,6 +564,26 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
   ctx.grayLineBuffer = lineBuffers.get();
   ctx.alphaLineBuffer = retainAlpha ? ctx.grayLineBuffer + grayBufSize : nullptr;
 
+  // Box-filter the vertical downscale so no source row is dropped. The
+  // accumulator is one output row wide (a few KB at panel width), not a full
+  // image, and is only allocated when it is actually needed. If the allocation
+  // fails the decode still runs, just with the point-sampled path.
+  std::unique_ptr<uint32_t[]> rowAccum;
+  ctx.boxFilter = ctx.visibleHeight > ctx.dstHeight && ctx.dstWidth > 0;
+  if (ctx.boxFilter) {
+    const size_t slots = static_cast<size_t>(ctx.dstWidth) * (retainAlpha ? 2u : 1u);
+    rowAccum = makeUniqueNoThrow<uint32_t[]>(slots);
+    if (!rowAccum) {
+      LOG_ERR("PNG", "OOM: %u bytes for box filter, falling back to point sampling",
+              static_cast<unsigned>(slots * sizeof(uint32_t)));
+      ctx.boxFilter = false;
+    } else {
+      memset(rowAccum.get(), 0, slots * sizeof(uint32_t));
+      ctx.rowAccumGray = rowAccum.get();
+      ctx.rowAccumAlpha = retainAlpha ? rowAccum.get() + ctx.dstWidth : nullptr;
+    }
+  }
+
   // Stream the pixel cache to disk. PNGdec delivers source scanlines top to
   // bottom and we emit at most one (downscaled) output row per callback, so the
   // band only needs a single row. Streaming keeps the working set tiny, so
@@ -464,10 +601,16 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
   unsigned long decodeStart = millis();
   ctx.lastYieldMs = decodeStart;
   rc = png->decode(&ctx, 0);
+
+  // The last output row is still in the accumulator: nothing follows it to
+  // trigger the flush inside the callback.
+  if (rc == PNG_SUCCESS && ctx.boxFilter) emitAccumulatedRow(&ctx);
   unsigned long decodeTime = millis() - decodeStart;
 
   ctx.grayLineBuffer = nullptr;
   ctx.alphaLineBuffer = nullptr;
+  ctx.rowAccumGray = nullptr;
+  ctx.rowAccumAlpha = nullptr;
 
   if (rc != PNG_SUCCESS) {
     LOG_ERR("PNG", "Decode failed: %d", rc);

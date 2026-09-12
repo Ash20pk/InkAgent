@@ -25,3 +25,18 @@ inline uint8_t applyBayerDither4Level(uint8_t gray, int x, int y) {
   if (adjusted < 192) return 2;
   return 3;
 }
+
+// Apply Bayer dithering for a 1-bit target. Returns 3 (white) or 0 (black) so the
+// result flows through the same writePixel path as the 4-level values.
+//
+// A 1-bit panel cannot use the 4-level result: writePixel's BW branch treats
+// every level below 3 as black, so three of the four levels collapse to black and
+// a photograph loses its midtones. Thresholding the original grey against the
+// Bayer matrix spreads the full 0-255 range across the 16 cells instead, so mid
+// greys come out as an even black/white mix.
+inline uint8_t applyBayerDither1Bit(uint8_t gray, int x, int y) {
+  // Cell centres: (2*bayer + 1) * 255 / 32 maps 0..15 onto thresholds 7..247,
+  // averaging 127 so mid grey dithers to roughly half black, half white.
+  const int threshold = ((2 * bayer4x4[y & 3][x & 3] + 1) * 255) / 32;
+  return gray > threshold ? 3 : 0;
+}
