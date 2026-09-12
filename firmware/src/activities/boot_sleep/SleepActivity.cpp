@@ -24,6 +24,7 @@
 
 #include "InkAgentSettings.h"
 #include "InkAgentState.h"
+#include "Epub/converters/ImageDecoderFactory.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -640,23 +641,42 @@ void SleepActivity::renderLockSleepScreen() const {
   const int lockW = pageWidth / 4;
   const int lockH = lockW;
 
-  // Wallpaper: a user BMP at /lock.bmp if present, else a light ground with a
-  // thin inner frame. Drawn 1-bit (no flush) so the padlock + hint overlay on top.
+  // Wallpaper: /lock.{jpg,jpeg,png,bmp} on the SD root if present (drawn into
+  // the framebuffer without flushing, so the padlock + hint overlay on top);
+  // otherwise a light ground with a thin inner frame.
+  auto drawWallpaper = [&]() -> bool {
+    // BMP first via the 1-bit path (no decoder heap); then JPEG/PNG via the
+    // shared image decoder (same one book images use).
+    HalFile bmpFile;
+    if (Storage.openFileForRead("SLP", "/lock.bmp", bmpFile)) {
+      Bitmap bmp(bmpFile, true, false);
+      const bool ok = bmp.parseHeaders() == BmpReaderError::Ok &&
+                      renderer.drawBitmap1Bit(bmp, calculateBitmapPlacement(bmp.getWidth(), bmp.getHeight(), renderer).x,
+                                              calculateBitmapPlacement(bmp.getWidth(), bmp.getHeight(), renderer).y,
+                                              pageWidth, pageHeight);
+      bmpFile.close();
+      if (ok) return true;
+    }
+    for (const char* path : {"/lock.jpg", "/lock.jpeg", "/lock.png"}) {
+      if (!Storage.exists(path)) continue;
+      auto* decoder = ImageDecoderFactory::getDecoder(path);
+      if (!decoder) continue;
+      RenderConfig cfg;
+      cfg.x = 0;
+      cfg.y = 0;
+      cfg.maxWidth = pageWidth;
+      cfg.maxHeight = pageHeight;
+      cfg.useGrayscale = true;
+      cfg.useDithering = true;
+      if (decoder->decodeToFramebuffer(path, renderer, cfg)) return true;
+      LOG_ERR("SLP", "lock wallpaper decode failed: %s", path);
+    }
+    return false;
+  };
   auto paintBase = [&]() {
     renderer.clearScreen();
-    HalFile wp;
-    if (Storage.openFileForRead("SLP", "/lock.bmp", wp)) {
-      Bitmap bmp(wp, true, false);
-      if (bmp.parseHeaders() == BmpReaderError::Ok) {
-        const auto place = calculateBitmapPlacement(bmp.getWidth(), bmp.getHeight(), renderer);
-        if (renderer.drawBitmap1Bit(bmp, place.x, place.y, pageWidth, pageHeight)) {
-          wp.close();
-          return;  // wallpaper drawn; overlay follows
-        }
-      }
-      wp.close();
-      renderer.clearScreen();
-    }
+    if (drawWallpaper()) return;  // wallpaper drawn; overlay follows
+    renderer.clearScreen();
     const int m = 24;
     renderer.drawRect(m, m, pageWidth - 2 * m, pageHeight - 2 * m, 2, true);
     renderer.drawCenteredText(UI_10_FONT_ID, m + 24, tr(STR_INKAGENT), true, EpdFontFamily::BOLD);
