@@ -682,12 +682,10 @@ void SleepActivity::renderLockSleepScreen() const {
     renderer.drawCenteredText(UI_10_FONT_ID, m + 24, tr(STR_INKAGENT), true, EpdFontFamily::BOLD);
   };
 
-  // Frame 1: open padlock (short lock transition).
-  paintBase();
-  drawPadlock(renderer, cx, lockCy, lockW, lockH, lockW / 3);
-  renderer.displayBuffer(HalDisplay::FAST_REFRESH);
-
-  // Frame 2 (retained): closed padlock + unlock hint.
+  // A single HALF refresh, as every other sleep screen does: it is the only
+  // clean waveform before the panel powers down. (An earlier FAST pre-frame
+  // "lock animation" left the panel half-updated -> a stuck-looking screen,
+  // especially when sleeping from a non-reader screen.)
   paintBase();
   drawPadlock(renderer, cx, lockCy, lockW, lockH, 0);
   const int hintY = lockCy + lockH / 2 + 44;
