@@ -1,0 +1,13 @@
+.DS_Store
+*.sqlite*
+backups/
+device-sim/state.json
+firmware/.dummy
+firmware/.pio/
+firmware/build/
+firmware/CMakeLists.txt
+firmware/managed_components/
+firmware/platformio.local.ini
+firmware/sdkconfig.default
+firmware/sdkconfig.defaults
+node_modules

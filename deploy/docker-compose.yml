@@ -1,0 +1,33 @@
+# Hosted relay: Caddy terminates HTTPS for relay.inkagent.dev and proxies to the
+# relay container. State lives in two named volumes: the SQLite DB and Caddy's certs.
+services:
+  relay:
+    build: ../relay
+    restart: unless-stopped
+    environment:
+      PORT: "8787"
+      PUBLIC_URL: "https://${RELAY_HOST}"
+      INK_DB: /data/inkagent.sqlite
+      INK_ACCESS_CODE: "${INK_ACCESS_CODE}"
+    volumes:
+      - relay-data:/data
+    expose:
+      - "8787"
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      RELAY_HOST: "${RELAY_HOST}"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - relay
+volumes:
+  relay-data:
+  caddy-data:
+  caddy-config:

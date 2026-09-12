@@ -1,0 +1,13 @@
+{
+  "name": "inkagent-relay",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=22.13" },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test --experimental-sqlite test/*.test.js",
+    "eval": "node ../evals/run.js"
+  }
+}

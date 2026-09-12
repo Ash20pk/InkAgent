@@ -1,0 +1,1 @@
+{ "name": "inkagent-evals", "version": "0.1.0", "type": "module", "private": true, "scripts": { "eval": "node --experimental-sqlite run.js", "eval:live": "node --experimental-sqlite run.js --live" } }

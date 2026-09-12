@@ -1,0 +1,3 @@
+add_executable(AbsoluteGrayscaleTest AbsoluteGrayscaleTest.cpp)
+target_link_libraries(AbsoluteGrayscaleTest PRIVATE inkagent_test_common GTest::gtest_main)
+gtest_discover_tests(AbsoluteGrayscaleTest)
