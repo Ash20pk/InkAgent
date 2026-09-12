@@ -126,7 +126,16 @@ void DictionaryDefinitionActivity::wrapText() {
   while (i < n) {
     const char c = text[i];
     if (c == '\n' || c == '\0') {
-      flushLine(i + 1);
+      // Collapse leading and consecutive blank lines: a paragraph break costs
+      // at most one empty line, never a stack of them (keeps AI answers dense).
+      const bool empty = (lineEnd == lineStart);
+      if (empty && (lines.empty() || lines.back().len == 0)) {
+        lineStart = i + 1;
+        lineEnd = i + 1;
+        lineWidth = 0;
+      } else {
+        flushLine(i + 1);
+      }
       i++;
       continue;
     }

@@ -45,7 +45,7 @@ test('markdown from the model is stripped because e-ink fonts do not render it',
   const P = await startMockProvider({ reply: () => '**Darcy** is _proud_.\n\n# Heading\n- item' });
   await R.setProvider(cookie, P.url);
   const r = await ask({ kind: 'who', text: PASSAGE });
-  assert.equal(r.json.text, 'Darcy is proud.\n\nHeading\n- item');
+  assert.equal(r.json.text, 'Darcy is proud.\nHeading - item');  // paragraphs collapsed to single lines, markdown stripped
   P.close();
 });
 

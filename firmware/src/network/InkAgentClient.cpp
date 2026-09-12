@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <InkAgentStore.h>
 #include <Logging.h>
+#include <SecureClient.h>
 #include <SecureHttpClient.h>
 #include <esp_mac.h>
 #include <HalStorage.h>
@@ -40,6 +41,12 @@ int post(const char* path, const char* body, size_t len, bool withToken, std::st
     return -1;
   }
   commonHeaders(http, withToken);
+  {
+    char pre[64];
+    snprintf(pre, sizeof(pre), "%s connect: free %uk max %uk", path, (unsigned)(ESP.getFreeHeap() / 1024),
+             (unsigned)(ESP.getMaxAllocHeap() / 1024));
+    InkAgentClient::sdLog(pre);
+  }
   int code = http.sendRequest("POST", reinterpret_cast<const uint8_t*>(body), len);
   if (code <= 0) {
     // One retry: the first TLS handshake after Wi-Fi comes up fails now and then.
@@ -59,7 +66,13 @@ int post(const char* path, const char* body, size_t len, bool withToken, std::st
   char line[200];
   snprintf(line, sizeof(line), "%s -> %d (%u B) %s", path, code, (unsigned)out.size(), heap);
   LOG_DBG("INKA", "%s", line);
-  if (code <= 0 || code >= 400) InkAgentClient::sdLog(line);
+  if (code <= 0 || code >= 400) {
+    char det[96];
+    snprintf(det, sizeof(det), "%s tls stage %d err %d", path, freeink::SecureClient::lastConnectStage,
+             freeink::SecureClient::lastConnectError);
+    InkAgentClient::sdLog(line);
+    if (code <= 0) InkAgentClient::sdLog(det);
+  }
   return code;
 }
 }  // namespace

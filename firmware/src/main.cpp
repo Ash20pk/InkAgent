@@ -407,6 +407,31 @@ void setup() {
 
   HalSystem::checkPanic();
 
+  // InkAgent field log: USB serial dies once Wi-Fi is up, so relay failures are
+  // written to the SD card and replayed here on the next boot (the device
+  // restarts after every network activity, cable still attached).
+  for (const char* logPath : {"/.inkagent/inkagent.log", "/.crosspoint/inkagent.log"}) {
+    HalFile f;
+    if (!Storage.openFileForRead("INKA", logPath, f)) continue;
+    LOG_INF("INKA", "---- %s ----", logPath);
+    char line[200];
+    size_t n = 0;
+    int c;
+    while ((c = f.read()) >= 0) {
+      if (c == '\n' || n == sizeof(line) - 1) {
+        line[n] = '\0';
+        if (n) LOG_INF("INKA", "%s", line);
+        n = 0;
+        if (c != '\n') line[n++] = static_cast<char>(c);
+      } else {
+        line[n++] = static_cast<char>(c);
+      }
+    }
+    if (n) { line[n] = '\0'; LOG_INF("INKA", "%s", line); }
+    f.close();
+    LOG_INF("INKA", "---- end ----");
+  }
+
   APP_STATE.loadFromFile();
   const bool isSleepWake = wakeupReason == HalGPIO::WakeupReason::PowerButton;
   const bool isPersistedSleepWake = isSleepWake && !APP_STATE.showBootScreen;
