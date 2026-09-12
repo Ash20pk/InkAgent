@@ -54,7 +54,7 @@ class ImageToFramebufferDecoder {
   // the row callbacks yield periodically so a long decode cannot starve the idle
   // task's watchdog.
   static constexpr int64_t MAX_SOURCE_DIMENSION = INT16_MAX;
-  static constexpr int64_t MAX_SOURCE_PIXELS = 8388608;  // 8 MP (e.g. 2048 * 4096)
+  static constexpr int64_t MAX_SOURCE_PIXELS = 16777216;  // 16 MP: covers 12 MP phone photos (decoded downscaled to screen)
 
   void warnUnsupportedFeature(const std::string& feature, const std::string& imagePath);
 };
