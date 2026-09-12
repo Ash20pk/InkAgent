@@ -22,9 +22,9 @@
 #include <limits>
 #include <string>
 
+#include "Epub/converters/ImageDecoderFactory.h"
 #include "InkAgentSettings.h"
 #include "InkAgentState.h"
-#include "Epub/converters/ImageDecoderFactory.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -628,10 +628,10 @@ void drawPadlock(GfxRenderer& r, int cx, int cy, int w, int h, int shackleLift) 
   const int shW = bodyW * 3 / 5;
   const int shX = cx - shW / 2;
   const int shTop = bodyY - shW / 2 - shackleLift;
-  const int shBottom = bodyY + stroke;  // overlap into the body when closed
-  r.drawLine(shX, shBottom, shX, shTop + shW / 2, stroke, true);                 // left post
-  r.drawLine(shX + shW, shBottom, shX + shW, shTop + shW / 2, stroke, true);     // right post
-  r.drawLine(shX, shTop + shW / 2, shX + shW, shTop + shW / 2, stroke, true);    // top bar (flat arch)
+  const int shBottom = bodyY + stroke;                                         // overlap into the body when closed
+  r.drawLine(shX, shBottom, shX, shTop + shW / 2, stroke, true);               // left post
+  r.drawLine(shX + shW, shBottom, shX + shW, shTop + shW / 2, stroke, true);   // right post
+  r.drawLine(shX, shTop + shW / 2, shX + shW, shTop + shW / 2, stroke, true);  // top bar (flat arch)
 }
 }  // namespace
 
@@ -659,7 +659,7 @@ void SleepActivity::renderLockSleepScreen() const {
         cfgFile.close();
       }
     }
-    if (path.empty() || !Storage.exists(path.c_str())) return false;
+    if (path.empty()) return false;
     std::string ext = path.substr(path.rfind('.') == std::string::npos ? path.size() : path.rfind('.'));
     for (auto& ch : ext) ch = static_cast<char>(tolower(ch));
     if (ext == ".bmp") {
@@ -704,7 +704,7 @@ void SleepActivity::renderLockSleepScreen() const {
   const int hintY = lockCy + lockH / 2 + 44;
   const int plateH = renderer.getLineHeight(UI_12_FONT_ID) + 12;
   const int plateW = renderer.getTextWidth(UI_12_FONT_ID, tr(STR_UNLOCK_HINT), EpdFontFamily::BOLD) + 28;
-  renderer.fillRect(cx - plateW / 2, hintY - 8, plateW, plateH, false);   // clear a legible strip
+  renderer.fillRect(cx - plateW / 2, hintY - 8, plateW, plateH, false);  // clear a legible strip
   renderer.drawRect(cx - plateW / 2, hintY - 8, plateW, plateH, 1, true);
   renderer.drawCenteredText(UI_12_FONT_ID, hintY, tr(STR_UNLOCK_HINT), true, EpdFontFamily::BOLD);
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
@@ -741,8 +741,8 @@ void SleepActivity::renderBitmapSleepScreen(const Bitmap& bitmap, const bool pre
   if (!preserveBackground) renderer.clearScreen();
 
   const bool hasGreyscale =
-      bitmap.hasGreyscale() && (preserveBackground || SETTINGS.sleepScreenCoverFilter ==
-                                                          InkAgentSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER);
+      bitmap.hasGreyscale() &&
+      (preserveBackground || SETTINGS.sleepScreenCoverFilter == InkAgentSettings::SLEEP_SCREEN_COVER_FILTER::NO_FILTER);
 
   if (!renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight, cropX, cropY)) {
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);

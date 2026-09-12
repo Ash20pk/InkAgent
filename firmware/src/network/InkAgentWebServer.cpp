@@ -1165,14 +1165,29 @@ void InkAgentWebServer::handleSetWallpaper() const {
   }
   String lower = path;
   lower.toLowerCase();
-  const bool isImage = lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png") || lower.endsWith(".bmp");
+  const bool isImage =
+      lower.endsWith(".jpg") || lower.endsWith(".jpeg") || lower.endsWith(".png") || lower.endsWith(".bmp");
   if (!isImage) {
     server->send(400, "text/plain", String("Not an image (use JPG, PNG or BMP): ") + path);
     return;
   }
-  if (!Storage.exists(path.c_str())) {
-    server->send(404, "text/plain", String("Image not found at: ") + path);
-    return;
+  {
+    HalFile probe = Storage.open(path.c_str());
+    const bool found = (bool)probe && !probe.isDirectory();
+    if (probe) probe.close();
+    if (!found) {
+      const String raw = server->arg("path");
+      String hex;
+      for (size_t i = 0; i < path.length(); i++) {
+        char b[4];
+        snprintf(b, sizeof(b), "%02X ", (uint8_t)path[i]);
+        hex += b;
+      }
+      String msg = "Image not found.\nnormalized=[" + path + "] len=" + String(path.length()) + "\nraw=[" + raw +
+                   "] len=" + String(raw.length()) + "\nhex=" + hex;
+      server->send(404, "text/plain", msg);
+      return;
+    }
   }
   if (!Storage.writeFile("/.inkagent/wallpaper.txt", path)) {
     server->send(500, "text/plain", "Could not save wallpaper choice");
