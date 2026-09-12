@@ -407,7 +407,6 @@ void setup() {
 
   HalSystem::checkPanic();
 
-
   // InkAgent field log: USB serial dies once Wi-Fi is up, so relay failures are
   // written to the SD card and replayed here on the next boot (the device
   // restarts after every network activity, cable still attached).
@@ -428,7 +427,10 @@ void setup() {
         line[n++] = static_cast<char>(c);
       }
     }
-    if (n) { line[n] = '\0'; LOG_INF("INKA", "%s", line); }
+    if (n) {
+      line[n] = '\0';
+      LOG_INF("INKA", "%s", line);
+    }
     f.close();
     LOG_INF("INKA", "---- end ----");
   }
