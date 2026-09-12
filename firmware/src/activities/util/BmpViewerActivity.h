@@ -18,7 +18,10 @@ class BmpViewerActivity final : public Activity {
   void loadSiblingImages();
   void doSetSleepCover();
   bool canSetSleepCover() const;
-  bool renderPng();
+  // True for formats handled by the streaming decoders (PNG/JPEG) rather than
+  // the in-house BMP reader.
+  bool isStreamDecodedImage() const;
+  bool renderStreamDecodedImage();
 
   std::string filePath;
   std::vector<std::string> siblingImages;

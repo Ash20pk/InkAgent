@@ -1,6 +1,7 @@
 #include "BmpViewerActivity.h"
 
 #include <Bitmap.h>
+#include <Epub/converters/JpegToFramebufferConverter.h>
 #include <Epub/converters/PngToFramebufferConverter.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
@@ -47,7 +48,8 @@ void BmpViewerActivity::loadSiblingImages() {
       file.getName(name, sizeof(name));
       if (name[0] != '.') {
         std::string fname(name);
-        if (FsHelpers::hasBmpExtension(fname) || FsHelpers::hasPngExtension(fname)) {
+        if (FsHelpers::hasBmpExtension(fname) || FsHelpers::hasPngExtension(fname) ||
+            FsHelpers::hasJpgExtension(fname)) {
           siblingImages.push_back(fname);
         }
       }
@@ -70,9 +72,17 @@ bool BmpViewerActivity::canSetSleepCover() const {
           FsHelpers::hasPngExtension(filePath));
 }
 
-bool BmpViewerActivity::renderPng() {
+bool BmpViewerActivity::isStreamDecodedImage() const {
+  return FsHelpers::hasPngExtension(filePath) || FsHelpers::hasJpgExtension(filePath);
+}
+
+bool BmpViewerActivity::renderStreamDecodedImage() {
+  const bool isJpeg = FsHelpers::hasJpgExtension(filePath);
+
   ImageDimensions dimensions;
-  if (!PngToFramebufferConverter::getDimensionsStatic(filePath, dimensions)) return false;
+  const bool gotDimensions = isJpeg ? JpegToFramebufferConverter::getDimensionsStatic(filePath, dimensions)
+                                    : PngToFramebufferConverter::getDimensionsStatic(filePath, dimensions);
+  if (!gotDimensions) return false;
   if (dimensions.width <= 0 || dimensions.height <= 0) return false;
 
   const float scale = std::min(static_cast<float>(renderer.getScreenWidth()) / dimensions.width,
@@ -82,6 +92,12 @@ bool BmpViewerActivity::renderPng() {
   RenderConfig config{(renderer.getScreenWidth() - width) / 2, (renderer.getScreenHeight() - height) / 2, width,
                       height};
 
+  // Both decoders stream (JPEG in MCU bands at a 1/2..1/8 coarse scale, PNG
+  // scanline-by-scanline), so a multi-megabyte photo costs decode time, not RAM.
+  if (isJpeg) {
+    JpegToFramebufferConverter converter;
+    return converter.decodeToFramebuffer(filePath, renderer, config);
+  }
   PngToFramebufferConverter converter;
   return converter.decodeToFramebuffer(filePath, renderer, config);
 }
@@ -97,16 +113,20 @@ void BmpViewerActivity::onEnter() {
   const auto pageHeight = renderer.getScreenHeight();
   Rect popupRect = GUI.drawPopup(renderer, tr(STR_LOADING_POPUP));
   GUI.fillPopupProgress(renderer, popupRect, 20);  // Initial 20% progress
-  if (FsHelpers::hasPngExtension(filePath)) {
+  if (isStreamDecodedImage()) {
     renderer.clearScreen();
     const bool hasPrevious = siblingImages.size() > 1 && currentImageIndex > 0;
     const bool hasNext = siblingImages.size() > 1 && currentImageIndex != -1 &&
                          currentImageIndex < static_cast<int>(siblingImages.size()) - 1;
     const auto labels = mappedInput.mapLabels(tr(STR_BACK), canSetSleepCover() ? tr(STR_SET_SLEEP_COVER) : "",
                                               hasPrevious ? "<" : "", hasNext ? ">" : "");
-    if (renderPng()) {
+    if (renderStreamDecodedImage()) {
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
-      renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+      // HALF, not FAST: this is a full-screen swap from arbitrary prior content
+      // (the file browser, and the loading popup drawn over it). On X3 a FAST
+      // refresh takes the differential path and leaves that content ghosting
+      // through the image; HALF requests a resync so the panel clears first.
+      renderer.displayBuffer(HalDisplay::HALF_REFRESH);
     } else {
       renderer.drawCenteredText(UI_10_FONT_ID, pageHeight / 2, tr(STR_FILE_OPEN_FAILED));
       GUI.drawButtonHints(renderer, labels.btn1, "", "", "");
@@ -204,7 +224,9 @@ void BmpViewerActivity::onEnter() {
         renderer.cleanupGrayscaleWithFrameBuffer();
         if (!planesReady) renderer.displayBuffer(HalDisplay::HALF_REFRESH);
       } else {
-        renderer.displayBuffer(HalDisplay::FAST_REFRESH);
+        // Full-screen swap from the file browser: see the note on the streamed
+        // path above for why this is not a FAST refresh.
+        renderer.displayBuffer(HalDisplay::HALF_REFRESH);
       }
 
     } else {
