@@ -1592,6 +1592,19 @@
             </div>
           </div>
 
+          <div class="advanced-setting-row">
+            <div class="setting-label">
+              <div class="setting-title">Optimize Images</div>
+              <div class="setting-desc">Resize photos to the screen and dither to black &amp; white (saved as .png)</div>
+            </div>
+            <div class="setting-controls">
+              <label class="toggle-switch">
+                <input type="checkbox" id="convertImagesToggle" onchange="updateUploadSettingsPersistence()">
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
           <div class="convert-settings" id="convertSettings" style="display:block;">
             <span>⚫ True-Grayscale</span>
           <span id="convertSizeSummary">📏 Max 480×800px</span>
@@ -3357,6 +3370,7 @@ const UPLOAD_SETTINGS_STORAGE_KEY = 'inkagent.files.uploadSettings.v1';
 const DEFAULT_UPLOAD_SETTINGS = Object.freeze({
   convertBeforeUpload: false,
   renameFromMetadata: false,
+  convertImages: true,
   quality: DEFAULT_JPEG_QUALITY,
   autoCrop: DEFAULT_ENABLE_AUTO_CROP,
   deviceTarget: 'auto',
@@ -3370,6 +3384,7 @@ function getCurrentUploadSettings() {
   return {
     convertBeforeUpload: !!document.getElementById('convertBeforeUpload')?.checked,
     renameFromMetadata: !!document.getElementById('renameFromMetadataToggle')?.checked,
+    convertImages: !!document.getElementById('convertImagesToggle')?.checked,
     quality: parseInt(document.getElementById('qualitySlider')?.value || JPEG_QUALITY, 10),
     autoCrop: !!document.getElementById('autoCropToggle')?.checked,
     deviceTarget: DEVICE_TARGET,
@@ -3385,6 +3400,7 @@ function applyUploadSettings(settings = {}) {
   try {
     document.getElementById('convertBeforeUpload').checked = !!merged.convertBeforeUpload;
     document.getElementById('renameFromMetadataToggle').checked = !!merged.renameFromMetadata;
+    document.getElementById('convertImagesToggle').checked = !!merged.convertImages;
     document.getElementById('autoCropToggle').checked = !!merged.autoCrop;
     document.getElementById('export-log-checkbox').checked = !!merged.exportLog;
     document.getElementById('rememberUploadSettings').checked = !!settings.rememberSettings;
@@ -5638,12 +5654,165 @@ function uploadFileHTTP(file, onProgress, onComplete, onError) {
   });
 }
 
+
+// ===== Image optimisation for upload =====
+// A phone photo is ~12 MP; the panel is 1-bit and at most a few hundred pixels
+// across. Decoding that on-device costs seconds, and its render path quantises
+// to four grey levels then collapses them to black/white at a single threshold,
+// which flattens a photograph's tonal range. Doing the work here instead —
+// resize, luminance, Floyd-Steinberg dither — hands the device pixels that are
+// already exactly black or white, so it renders them 1:1 with no tonal loss.
+// Output is always PNG: re-encoding a dithered image as JPEG would smear the
+// dither pattern into grey mush.
+
+const IMAGE_UPLOAD_EXT = /\.(jpe?g|png|gif|webp|bmp)$/i;
+const FALLBACK_SCREEN = { width: 528, height: 792 };
+let deviceScreenPromise = null;
+
+// Screen size comes from the device so the converted image needs no on-device
+// resize; a resize there would resample the dither away.
+function getDeviceScreen() {
+  if (!deviceScreenPromise) {
+    deviceScreenPromise = fetch('/api/status')
+      .then(r => r.ok ? r.json() : Promise.reject(new Error('status ' + r.status)))
+      .then(j => {
+        const w = parseInt(j.screenWidth, 10);
+        const h = parseInt(j.screenHeight, 10);
+        if (w > 0 && h > 0) return { width: w, height: h };
+        throw new Error('device reported no screen size');
+      })
+      .catch(err => {
+        console.warn('[Image] Falling back to default screen size:', err.message);
+        return FALLBACK_SCREEN;
+      });
+  }
+  return deviceScreenPromise;
+}
+
+// Repeated halving keeps detail that a single large downscale would alias away.
+function resizeToFit(source, targetW, targetH) {
+  let canvas = document.createElement('canvas');
+  let w = source.width;
+  let h = source.height;
+  canvas.width = w;
+  canvas.height = h;
+  let ctx = canvas.getContext('2d');
+  ctx.drawImage(source, 0, 0);
+
+  while (w > targetW * 2 && h > targetH * 2) {
+    w = Math.max(targetW, Math.floor(w / 2));
+    h = Math.max(targetH, Math.floor(h / 2));
+    const step = document.createElement('canvas');
+    step.width = w;
+    step.height = h;
+    const stepCtx = step.getContext('2d');
+    stepCtx.imageSmoothingEnabled = true;
+    stepCtx.imageSmoothingQuality = 'high';
+    stepCtx.drawImage(canvas, 0, 0, w, h);
+    canvas = step;
+  }
+
+  const out = document.createElement('canvas');
+  out.width = targetW;
+  out.height = targetH;
+  const outCtx = out.getContext('2d');
+  outCtx.imageSmoothingEnabled = true;
+  outCtx.imageSmoothingQuality = 'high';
+  outCtx.drawImage(canvas, 0, 0, targetW, targetH);
+  return out;
+}
+
+// Floyd-Steinberg error diffusion to pure black/white. Serpentine traversal
+// avoids the directional worm artefacts a left-to-right-only scan produces on
+// smooth gradients such as skies.
+function ditherToBlackWhite(imageData) {
+  const { data, width, height } = imageData;
+  const gray = new Float32Array(width * height);
+
+  for (let i = 0, p = 0; i < gray.length; i++, p += 4) {
+    // BT.601 luma: matches how the e-ink panel's contrast reads to the eye.
+    gray[i] = 0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2];
+  }
+
+  for (let y = 0; y < height; y++) {
+    const leftToRight = (y & 1) === 0;
+    const xStart = leftToRight ? 0 : width - 1;
+    const xEnd = leftToRight ? width : -1;
+    const xStep = leftToRight ? 1 : -1;
+    const ahead = xStep;
+
+    for (let x = xStart; x !== xEnd; x += xStep) {
+      const i = y * width + x;
+      const oldValue = gray[i];
+      const newValue = oldValue < 128 ? 0 : 255;
+      const error = oldValue - newValue;
+      gray[i] = newValue;
+
+      const hasAhead = leftToRight ? (x + 1 < width) : (x - 1 >= 0);
+      const hasBehind = leftToRight ? (x - 1 >= 0) : (x + 1 < width);
+      if (hasAhead) gray[i + ahead] += error * 7 / 16;
+      if (y + 1 < height) {
+        const below = i + width;
+        if (hasBehind) gray[below - ahead] += error * 3 / 16;
+        gray[below] += error * 5 / 16;
+        if (hasAhead) gray[below + ahead] += error * 1 / 16;
+      }
+    }
+  }
+
+  for (let i = 0, p = 0; i < gray.length; i++, p += 4) {
+    const v = gray[i] < 128 ? 0 : 255;
+    data[p] = data[p + 1] = data[p + 2] = v;
+    data[p + 3] = 255;
+  }
+  return imageData;
+}
+
+// Returns a converted PNG File, or null if the image is already device-ready.
+async function convertImageForDevice(file) {
+  const screen = await getDeviceScreen();
+
+  let bitmap;
+  try {
+    // from-image applies the EXIF orientation tag; without it a portrait phone
+    // photo decodes as the landscape frame it is physically stored in.
+    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  } catch (err) {
+    throw new Error('could not decode image: ' + err.message);
+  }
+
+  try {
+    // Match the device viewer's fit: preserve aspect, never upscale. Landing
+    // inside the screen box means the device scales by exactly 1.0.
+    const scale = Math.min(screen.width / bitmap.width, screen.height / bitmap.height, 1);
+    const targetW = Math.max(1, Math.floor(bitmap.width * scale));
+    const targetH = Math.max(1, Math.floor(bitmap.height * scale));
+
+    const canvas = resizeToFit(bitmap, targetW, targetH);
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.getImageData(0, 0, targetW, targetH);
+    ctx.putImageData(ditherToBlackWhite(imageData), 0, 0);
+
+    const blob = await new Promise((resolve, reject) => {
+      canvas.toBlob(b => b ? resolve(b) : reject(new Error('PNG encoding failed')), 'image/png');
+    });
+
+    const newName = file.name.replace(IMAGE_UPLOAD_EXT, '') + '.png';
+    console.log(`[Image] ${file.name}: ${bitmap.width}x${bitmap.height} ${formatBytes(file.size)} -> ` +
+                `${targetW}x${targetH} ${formatBytes(blob.size)}`);
+    return new File([blob], newName, { type: 'image/png', lastModified: file.lastModified });
+  } finally {
+    bitmap.close();
+  }
+}
+
 async function uploadFile() {
   if (isUploadInProgress) return;
 
   const fileInput = document.getElementById('fileInput');
   const files = Array.from(fileInput.files);
   const convertEnabled = document.getElementById('convertBeforeUpload').checked;
+  const imageConvertEnabled = document.getElementById('convertImagesToggle').checked;
 
   if (files.length === 0) {
     alert('Please select at least one file!');
@@ -5759,6 +5928,21 @@ async function uploadFile() {
       if (file.name !== originalName) {
         console.log(`[Upload] Renamed from metadata: ${originalName} -> ${file.name}`);
       }
+    }
+
+    // Convert images before reserving a name: conversion renames to .png, and the
+    // reserved name must match what is actually uploaded. On failure the original
+    // file is uploaded unchanged rather than failing the whole transfer.
+    if (imageConvertEnabled && IMAGE_UPLOAD_EXT.test(file.name)) {
+      progressFill.style.backgroundColor = '#9b59b6';
+      progressText.style.color = '';
+      progressText.textContent = `Optimizing ${file.name} (${currentIndex + 1}/${files.length})...`;
+      try {
+        file = await convertImageForDevice(file);
+      } catch (err) {
+        console.warn(`[Image] Optimisation failed for ${file.name}, uploading original:`, err.message);
+      }
+      progressFill.style.backgroundColor = '#27ae60';
     }
 
     const availableName = reserveAvailableUploadFilename(file.name, usedFileNames);

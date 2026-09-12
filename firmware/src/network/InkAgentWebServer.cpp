@@ -3,6 +3,7 @@
 #include <ArduinoJson.h>
 #include <BoardConfig.h>
 #include <FsHelpers.h>
+#include <HalDisplay.h>
 #include <HalGPIO.h>
 #include <HalStorage.h>
 #include <Logging.h>
@@ -13,8 +14,8 @@
 #include <algorithm>
 #include <cctype>
 
-#include "InkAgentSettings.h"
 #include "FontInstaller.h"
+#include "InkAgentSettings.h"
 #include "OpdsServerStore.h"
 #include "SdCardFontSystem.h"
 #include "SettingsList.h"
@@ -413,6 +414,16 @@ void InkAgentWebServer::handleStatus() const {
   doc["rssi"] = apMode ? 0 : WiFi.RSSI();
   doc["freeHeap"] = ESP.getFreeHeap();
   doc["uptime"] = millis() / 1000;
+
+  // Logical screen size for the current orientation. Clients pre-scale images to
+  // these exact dimensions so the device renders them 1:1; any resize on-device
+  // would resample away the client-side dithering.
+  const uint16_t panelW = display.getDisplayWidth();
+  const uint16_t panelH = display.getDisplayHeight();
+  const bool portrait =
+      SETTINGS.orientation == InkAgentSettings::PORTRAIT || SETTINGS.orientation == InkAgentSettings::INVERTED;
+  doc["screenWidth"] = portrait ? std::min(panelW, panelH) : std::max(panelW, panelH);
+  doc["screenHeight"] = portrait ? std::max(panelW, panelH) : std::min(panelW, panelH);
 #if FREEINK_DEVICE_X4 || FREEINK_DEVICE_X3
   doc["device"] = gpio.deviceIsX3() ? "X3" : "X4";
 #else
