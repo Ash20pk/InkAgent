@@ -4,6 +4,7 @@
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <HalDisplay.h>
 #include <HalStorage.h>
 #include <I18n.h>
@@ -14,6 +15,7 @@
 #include <cstring>
 #include <vector>
 
+#include "AppDrawerActivity.h"
 #include "InkAgentSettings.h"
 #include "InkAgentState.h"
 #include "MappedInputManager.h"
@@ -23,7 +25,7 @@
 #include "fontIds.h"
 
 int HomeActivity::getMenuItemCount() const {
-  int count = 4;  // File Browser, Recents, File transfer, Settings
+  int count = 3;  // Recents, Settings, Apps
   if (!recentBooks.empty()) {
     count += recentBooks.size();
   }
@@ -194,6 +196,9 @@ void HomeActivity::loop() {
       case HomeMenuItem::SETTINGS_MENU:
         onSettingsOpen();
         break;
+      case HomeMenuItem::APP_DRAWER:
+        onAppDrawerOpen();
+        break;
       default:
         break;
     }
@@ -289,8 +294,20 @@ void HomeActivity::render(RenderLock&&) {
   // Band spans topPadding..homeTopPadding: the cover tile starts at the fixed
   // homeTopPadding, so the height must shrink by topPadding or the band (and a
   // centered title, e.g. RoundedRaff's book title) sinks into the tile.
+  // Themes that treat the home band as a system status bar get the clock here;
+  // the book is identified by its cover, not by a title in the chrome.
+  char homeClock[12] = {0};
+  const char* headerTitle =
+      metrics.homeContinueReadingInMenu && !recentBooks.empty() ? recentBooks[0].title.c_str() : nullptr;
+  if (metrics.homeHeaderShowsClock) {
+    const auto sb = SETTINGS.statusBarSpec();
+    headerTitle =
+        (halClock.isAvailable() && halClock.formatTime(homeClock, sizeof(homeClock), sb.clockUtcOffsetQ, sb.clock12h))
+            ? homeClock
+            : nullptr;
+  }
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.homeTopPadding - metrics.topPadding},
-                 metrics.homeContinueReadingInMenu && !recentBooks.empty() ? recentBooks[0].title.c_str() : nullptr);
+                 headerTitle);
 
   // Record the tile rect so storeCoverBuffer (called from the theme) knows
   // which sub-region of the framebuffer to snapshot. ~16 KB in Portrait
@@ -305,13 +322,13 @@ void HomeActivity::render(RenderLock&&) {
                           std::bind(&HomeActivity::storeCoverBuffer, this));
 
   // Build menu items dynamically
-  std::vector<const char*> menuItems = {tr(STR_BROWSE_FILES), tr(STR_MENU_RECENT_BOOKS), tr(STR_FILE_TRANSFER),
-                                        tr(STR_SETTINGS_TITLE)};
-  std::vector<UIIcon> menuIcons = {Folder, Recent, Transfer, Settings};
+  // Files and File Transfer deliberately absent: both are in the app drawer.
+  std::vector<const char*> menuItems = {tr(STR_MENU_RECENT_BOOKS), tr(STR_SETTINGS_TITLE), tr(STR_APPS)};
+  std::vector<UIIcon> menuIcons = {Recent, Settings, Apps};
 
   if (hasOpdsServers) {
-    menuItems.insert(menuItems.begin() + 2, tr(STR_OPDS_BROWSER));
-    menuIcons.insert(menuIcons.begin() + 2, Library);
+    menuItems.insert(menuItems.begin() + 1, tr(STR_OPDS_BROWSER));
+    menuIcons.insert(menuIcons.begin() + 1, Library);
   }
 
   if (metrics.homeContinueReadingInMenu && !recentBooks.empty()) {
@@ -348,6 +365,10 @@ void HomeActivity::render(RenderLock&&) {
 void HomeActivity::onSelectBook(const std::string& path) { activityManager.goToReader(path); }
 
 void HomeActivity::onFileBrowserOpen() { activityManager.goToFileBrowser(); }
+
+void HomeActivity::onAppDrawerOpen() {
+  activityManager.pushActivity(std::make_unique<AppDrawerActivity>(renderer, mappedInput));
+}
 
 void HomeActivity::onRecentsOpen() { activityManager.goToRecentBooks(); }
 

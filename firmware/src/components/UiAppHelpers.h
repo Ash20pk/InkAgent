@@ -12,6 +12,7 @@
 #include "components/UIThemeTokens.h"
 #include "components/icons/customListIcons.h"
 #include "components/icons/listIcons.h"
+#include "icons/drawerIcons.h"
 
 // Shared glue for activities hosting a FreeInkApp: the font-bound render
 // target and the touch snapshot FreeInkApp routing consumes.
@@ -101,6 +102,18 @@ inline freeink::ui::BitmapRef listIconFor(const UIIcon icon, const int size = 24
         return freeink::ui::bitmapFromIcon(icon_usb_32);
       case UIIcon::Bookmark:
         return freeink::ui::bitmapFromIcon(icon_bookmark_32);
+      case UIIcon::Settings:
+        return freeink::ui::bitmapFromIcon(icon_settings_32);
+      case UIIcon::Apps:
+        return freeink::ui::bitmapFromIcon(icon_apps_32);
+      case UIIcon::Info:
+        return freeink::ui::bitmapFromIcon(icon_info_32);
+      case UIIcon::Light:
+        return freeink::ui::bitmapFromIcon(icon_sun_32);
+      case UIIcon::Transfer:
+        return freeink::ui::bitmapFromIcon(icon_upload_32);
+      case UIIcon::Recent:
+        return freeink::ui::bitmapFromIcon(icon_book_32);
       default:
         return {};
     }
@@ -126,6 +139,18 @@ inline freeink::ui::BitmapRef listIconFor(const UIIcon icon, const int size = 24
       return freeink::ui::bitmapFromIcon(icon_usb_24);
     case UIIcon::Bookmark:
       return freeink::ui::bitmapFromIcon(icon_bookmark_24);
+    case UIIcon::Settings:
+      return freeink::ui::bitmapFromIcon(icon_settings_24);
+    case UIIcon::Apps:
+      return freeink::ui::bitmapFromIcon(icon_apps_24);
+    case UIIcon::Info:
+      return freeink::ui::bitmapFromIcon(icon_info_24);
+    case UIIcon::Light:
+      return freeink::ui::bitmapFromIcon(icon_sun_24);
+    case UIIcon::Transfer:
+      return freeink::ui::bitmapFromIcon(icon_upload_24);
+    case UIIcon::Recent:
+      return freeink::ui::bitmapFromIcon(icon_book_24);
     default:
       return {};
   }
