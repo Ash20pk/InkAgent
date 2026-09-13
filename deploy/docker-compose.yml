@@ -8,10 +8,7 @@ services:
       PORT: "8787"
       PUBLIC_URL: "https://${RELAY_HOST}"
       INK_DB: /data/inkagent.sqlite
-      INK_OAUTH_GITHUB_ID: "${INK_OAUTH_GITHUB_ID:-}"
-      INK_OAUTH_GITHUB_SECRET: "${INK_OAUTH_GITHUB_SECRET:-}"
-      INK_OAUTH_GOOGLE_ID: "${INK_OAUTH_GOOGLE_ID:-}"
-      INK_OAUTH_GOOGLE_SECRET: "${INK_OAUTH_GOOGLE_SECRET:-}"
+      INK_SIGNUP_CLOSED: "${INK_SIGNUP_CLOSED:-}"
     volumes:
       - relay-data:/data
     expose:

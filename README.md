@@ -19,7 +19,7 @@ live on the relay you run, or the hosted one at `relay.inkagent.dev`.
 ```
 firmware/       device firmware (PlatformIO, ESP32-C3), host tests under firmware/test
 firmware/examples/apps/   example manifest apps, ready to copy onto a card
-relay/          Node 22, zero dependencies: pairing, agent, app hosting, OAuth, dashboard
+relay/          Node 22, zero dependencies: pairing, agent, app hosting, auth, dashboard
 deploy/         Docker Compose + Caddy for a hosted relay with automatic HTTPS
 device-sim/     simulator that speaks the exact device protocol
 evals/          offline evals (protocol, fit, quality rubric, resilience); --live for a real model
@@ -157,10 +157,10 @@ firmware/src/activities/network/PeerSend*  reader-to-reader transfer
 — including why the deploy rsync must never use `--delete`, and how to take a
 backup that actually contains the data (SQLite runs in WAL mode here).
 
-Sign-in is OAuth — GitHub or Google, whichever you configure — and a relay with
-none configured refuses to sign anyone in rather than falling back to something
-open. `INK_DEV_LOGIN=1` restores an unverified email box for local work only.
-The device pins ISRG Root X1 and X2 rather than trusting any certificate.
+Sign-in is an email and a password, hashed with scrypt, plus **passkeys** —
+WebAuthn, verified on the relay, so a signed-in device needs no password at all.
+Set `INK_SIGNUP_CLOSED=1` once your account exists. The device pins ISRG Root X1
+and X2 rather than trusting any certificate.
 
 Exchanges are not stored. There is no traces page: the relay keeps which device
 asked, which app, how long it took and whether the answer was trimmed, and none

@@ -2,16 +2,11 @@
 
 1. DNS: `A relay.inkagent.dev → <droplet IP>`.
 2. Copy the repo: `rsync -az --exclude node_modules --exclude '*.sqlite*' ~/inkagent/relay ~/inkagent/deploy root@<ip>:/opt/inkagent/`
-3. Register an OAuth app with GitHub or Google. Callback URL:
-   `https://relay.inkagent.dev/auth/callback`.
-4. On the droplet: `cp /opt/inkagent/deploy/.env.example /opt/inkagent/deploy/.env`, set the client id
-   and secret, then `bash /opt/inkagent/deploy/setup-droplet.sh`.
-
-A relay with no OAuth configured refuses to sign anyone in. That is deliberate:
-the alternative fallback would be an unauthenticated email box in front of
-someone's model key. `INK_DEV_LOGIN=1` re-enables that box for local work and
-must never be set on a public relay.
-
+3. On the droplet: `cp /opt/inkagent/deploy/.env.example /opt/inkagent/deploy/.env`, then
+   `bash /opt/inkagent/deploy/setup-droplet.sh`.
+4. Open the relay, create your account, and add a passkey under **Account**.
+   Then set `INK_SIGNUP_CLOSED=1` in `.env` and `docker compose up -d` so nobody
+   else can register.
 5. Check: `curl https://relay.inkagent.dev/health` → `{"ok":true}`.
 
 Caddy fetches and renews the Let's Encrypt certificate itself once DNS resolves.

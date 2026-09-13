@@ -23,7 +23,6 @@ export async function startRelay() {
   // The suite signs in through the development email box; the real path is
   // OAuth, which needs a provider. DEV_LOGIN is read when dashboard.js is
   // first imported, so this has to be set before createApp pulls it in.
-  process.env.INK_DEV_LOGIN = '1';
   const app = createApp({ dbPath: ':memory:', publicUrl: 'http://relay.test' });
   await new Promise(r => app.server.listen(0, r));
   const base = `http://127.0.0.1:${app.server.address().port}`;
@@ -34,9 +33,18 @@ export async function startRelay() {
     return { status: res.status, json, text, headers: res.headers };
   };
   // Dashboard helpers acting as a signed-in browser
-  const login = async (email = 'ash@example.com') => {
-    const res = await fetch(base + '/login', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ email }), redirect: 'manual' });
-    return res.headers.get('set-cookie').split(';')[0];
+  // Signs up on first use, signs in afterwards — the suite reuses addresses
+  // across tests and both paths must end with a usable session cookie.
+  const login = async (email = 'ash@example.com', password = 'correct-horse-battery') => {
+    const post = (path) => fetch(base + path, {
+      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ email, password }), redirect: 'manual',
+    });
+    let res = await post('/signup');
+    if (!res.headers.get('set-cookie')) res = await post('/login');
+    const cookie = res.headers.get('set-cookie');
+    if (!cookie) throw new Error('login failed for ' + email);
+    return cookie.split(';')[0];
   };
   const form = async (cookie, path, fields) => {
     const res = await fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', cookie }, body: new URLSearchParams(fields), redirect: 'manual' });

@@ -1,25 +1,37 @@
-// Dashboard: dev login by email (OAuth providers slot in behind the same
-// session cookie later), claim page for the device flow, provider config,
-// device list, session traces. Server-rendered HTML, no client framework and
-// no external assets — the relay serves itself, and this has to stay fast on a
-// phone held next to the reader during pairing.
+// Dashboard: sign-in by email and password or by passkey, the claim page for
+// the device flow, provider config, the device list and the app editor.
+// Server-rendered HTML, no client framework and no external assets — the relay
+// serves itself, and this has to stay fast on a phone held next to the reader
+// during pairing. The only scripts are the two WebAuthn ceremonies, which
+// cannot be done without one.
 import { json, html, readBody, cookies } from '../http.js';
 import { now, id, sha } from '../db.js';
 import { validateManifest, SOURCES, ICONS, LIMITS } from '../manifest.js';
-import { available as oauthAvailable, authorizeUrl, emailFromCode, PROVIDERS } from '../oauth.js';
+import { hashPassword, verifyPassword, passwordProblem } from '../password.js';
+import { challenge as newChallenge, rpIdFrom, verifyRegistration, verifyAssertion } from '../webauthn.js';
 
-// Sign-in is OAuth. The email box that preceded it verified nothing — it
-// issued a session for any address typed into it — and the shared access code
-// fencing it is not a secret once a beta has more than a few people in it.
+// Sign-in is an email and a password, with a passkey as an alternative once
+// one is registered. The box this replaces verified nothing at all — it issued
+// a session for any address typed into it — behind a shared access code, which
+// stops being a secret as soon as a beta has more than a few people in it.
 //
-// INK_DEV_LOGIN re-enables that box for local work and for the tests. It is
-// deliberately opt-in: a deployment with no OAuth configured and no dev flag
-// refuses to sign anyone in rather than falling back to something open.
-//
-// Read per request rather than captured at import, so it cannot depend on
-// whether the environment was set before or after this module was first
-// pulled in — a trap that silently disables it under a test runner.
-const devLogin = () => process.env.INK_DEV_LOGIN === '1';
+// Accounts are isolated by design: readers, apps and the model key all hang off
+// user_id, so a new signup sees nothing belonging to anyone else. Set
+// INK_SIGNUP_CLOSED=1 once the accounts that should exist do.
+const signupClosed = () => process.env.INK_SIGNUP_CLOSED === '1';
+
+// Failed attempts, per email, in memory. Enough to make an online guessing
+// attack pointless; a serious one belongs at the proxy, not here.
+const attempts = new Map();
+const THROTTLE_AFTER = 5, THROTTLE_MS = 5000;
+function failedRecently(email) {
+  const a = attempts.get(email);
+  return a && a.count >= THROTTLE_AFTER && Date.now() - a.at < THROTTLE_MS;
+}
+function noteFailure(email) {
+  const a = attempts.get(email) || { count: 0, at: 0 };
+  attempts.set(email, { count: a.count + 1, at: Date.now() });
+}
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -126,7 +138,7 @@ details>summary{cursor:pointer;color:var(--muted);font-size:.875rem;padding:.4re
   .row button{width:100%}
 }`;
 
-const NAV = [['/devices', 'Readers'], ['/apps', 'Apps'], ['/provider', 'Your AI']];
+const NAV = [['/devices', 'Readers'], ['/apps', 'Apps'], ['/provider', 'Your AI'], ['/account', 'Account']];
 
 const FAVICON = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f6f4f'/%3E%3Crect x='9' y='8' width='14' height='16' rx='2' fill='%23fff'/%3E%3Crect x='12' y='12' width='8' height='1.6' fill='%232f6f4f'/%3E%3Crect x='12' y='16' width='8' height='1.6' fill='%232f6f4f'/%3E%3C/svg%3E";
 
@@ -152,6 +164,11 @@ ${chrome
 // Failures render inside the page that caused them, with the form still filled
 // in, rather than on a dead-end page the user has to navigate back from.
 const note = (text, bad = false) => `<div class="note${bad ? ' bad' : ''}">${text}</div>`;
+
+const sessionCookie = (sid) =>
+  `ink_session=${sid}; Path=/; HttpOnly; SameSite=Lax${securePart()}`;
+
+const originOf = (publicUrl) => { try { return new URL(publicUrl).origin; } catch { return 'http://localhost'; } };
 
 const securePart = () => (process.env.PUBLIC_URL || '').startsWith('https') ? '; Secure' : '';
 
@@ -184,6 +201,14 @@ export function dashboardRoutes(db, { devTokens, publicUrl = process.env.PUBLIC_
   const q = {
     userByEmail: db.prepare(`SELECT * FROM users WHERE email = ?`),
     userInsert: db.prepare(`INSERT INTO users (id,email,created_at) VALUES (?,?,?)`),
+    pwGet: db.prepare(`SELECT hash FROM passwords WHERE user_id = ?`),
+    pwSet: db.prepare(`INSERT INTO passwords (user_id,hash,updated_at) VALUES (?,?,?)
+                       ON CONFLICT(user_id) DO UPDATE SET hash=excluded.hash, updated_at=excluded.updated_at`),
+    credsForUser: db.prepare(`SELECT * FROM credentials WHERE user_id = ? ORDER BY created_at`),
+    credById: db.prepare(`SELECT * FROM credentials WHERE cred_id = ?`),
+    credInsert: db.prepare(`INSERT INTO credentials (cred_id,user_id,public_key,label,counter,created_at) VALUES (?,?,?,?,?,?)`),
+    credTouch: db.prepare(`UPDATE credentials SET counter = ?, last_used = ? WHERE cred_id = ?`),
+    credDelete: db.prepare(`DELETE FROM credentials WHERE cred_id = ? AND user_id = ?`),
     sessInsert: db.prepare(`INSERT INTO sessions (id,user_id,created_at) VALUES (?,?,?)`),
     sessUser: db.prepare(`SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?`),
     pairByUserCode: db.prepare(`SELECT * FROM pairings WHERE user_code = ?`),
@@ -279,92 +304,245 @@ export function dashboardRoutes(db, { devTokens, publicUrl = process.env.PUBLIC_
     'GET /': async ({ res }) => { res.writeHead(302, { location: '/devices' }); res.end(); },
 
     'GET /login': async ({ res, query }) => {
-      const providers = oauthAvailable();
       const next = esc(query.next || '/devices');
-      const buttons = providers.map(k =>
-        `<div class="actions"><a class="btn" href="/auth/start?p=${k}&next=${encodeURIComponent(query.next || '/devices')}">Continue with ${esc(PROVIDERS[k].name)}</a></div>`).join('');
+      html(res, 200, page('Sign in', `
+        <form method="post" action="/login" id="pwform">
+          <input type="hidden" name="next" value="${next}">
+          <label>Email <input name="email" type="email" required autofocus autocomplete="username"></label>
+          <label>Password <input name="password" type="password" required autocomplete="current-password"></label>
+          <div class="actions"><button class="btn">Sign in</button></div>
+        </form>
 
-      const devBox = devLogin() ? `
-        <details${providers.length ? '' : ' open'}>
-          <summary>Development sign-in</summary>
-          ${note('This accepts any address without verifying it. It is on because INK_DEV_LOGIN is set, and must not be set on a public relay.', true)}
-          <form method="post" action="/login"><input type="hidden" name="next" value="${next}">
-            <label>Email <input name="email" type="email" required autocomplete="email"></label>
-            <div class="actions"><button>Sign in</button></div>
-          </form>
-        </details>` : '';
+        <div class="actions"><button id="pk" class="btn-quiet" type="button">Use a passkey</button></div>
+        <p id="pkmsg" class="muted small" hidden></p>
 
-      const nothing = (!providers.length && !devLogin()) ? `<div class="empty">
-        <strong>No sign-in method configured</strong>
-        <p>Set ${Object.values(PROVIDERS).map(p => `<code>${p.idEnv}</code>`).join(' or ')} together with the matching
-        secret, then restart the relay. For local work, set <code>INK_DEV_LOGIN=1</code> instead.</p></div>` : '';
+        ${signupClosed() ? '' : '<p class="muted small">No account? <a href="/signup">Create one</a>.</p>'}
 
-      html(res, 200, page('Sign in', buttons + nothing + devBox, {
-        chrome: false,
-        lead: providers.length ? 'Your readers and your model key live behind this account.' : '',
-      }));
+        <script>
+        (function () {
+          var b = document.getElementById('pk'), msg = document.getElementById('pkmsg');
+          if (!window.PublicKeyCredential) { b.hidden = true; return; }
+          var u8 = function (s) { s = s.replace(/-/g,'+').replace(/_/g,'/');
+            var raw = atob(s + '==='.slice((s.length + 3) % 4)), a = new Uint8Array(raw.length);
+            for (var i = 0; i < raw.length; i++) a[i] = raw.charCodeAt(i); return a; };
+          var b64 = function (buf) { var s = ''; var a = new Uint8Array(buf);
+            for (var i = 0; i < a.length; i++) s += String.fromCharCode(a[i]);
+            return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); };
+          b.addEventListener('click', async function () {
+            msg.hidden = false; msg.textContent = 'Waiting for your passkey…';
+            try {
+              var opts = await (await fetch('/auth/passkey/options')).json();
+              var cred = await navigator.credentials.get({ publicKey: {
+                challenge: u8(opts.challenge), rpId: opts.rpId, userVerification: 'preferred', timeout: 60000 } });
+              var r = await fetch('/auth/passkey/verify', { method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ id: cred.id,
+                  authenticatorData: b64(cred.response.authenticatorData),
+                  clientDataJSON: b64(cred.response.clientDataJSON),
+                  signature: b64(cred.response.signature),
+                  next: ${JSON.stringify('')} || undefined }) });
+              var out = await r.json();
+              if (out.ok) { location.href = out.next || '/devices'; }
+              else { msg.textContent = out.error || 'That passkey was not recognised.'; }
+            } catch (e) { msg.textContent = 'Passkey sign-in was cancelled or failed.'; }
+          });
+        })();
+        </script>`,
+        { chrome: false, lead: 'Your readers and your model key live behind this account.' }));
     },
 
-    // Hands the browser to the provider. The state is random, kept in a
-    // short-lived cookie, and compared on the way back, so a callback the user
-    // did not start cannot mint a session.
-    'GET /auth/start': async ({ res, query }) => {
-      const key = String(query.p || '');
-      const state = id(18);
-      const url = authorizeUrl(key, { publicUrl, state });
-      if (!url) { res.writeHead(302, { location: '/login' }); return res.end(); }
-      const next = String(query.next || '/devices');
-      const safeNext = next.startsWith('/') ? next : '/devices';
-      res.writeHead(302, {
-        location: url,
-        'set-cookie': `ink_oauth=${key}:${state}:${encodeURIComponent(safeNext)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600${securePart()}`,
-      });
-      res.end();
+    'GET /signup': async ({ res }) => {
+      if (signupClosed()) { res.writeHead(302, { location: '/login' }); return res.end(); }
+      html(res, 200, page('Create an account', `
+        <form method="post" action="/signup">
+          <label>Email <input name="email" type="email" required autofocus autocomplete="username"></label>
+          <label>Password
+            <span class="hint">At least 10 characters. Length matters more than symbols.</span>
+            <input name="password" type="password" required autocomplete="new-password">
+          </label>
+          <div class="actions"><button class="btn">Create account</button><a class="btn-quiet" href="/login">Sign in instead</a></div>
+        </form>`, { chrome: false, lead: 'One account holds your readers, your apps and your model key.' }));
     },
 
-    'GET /auth/callback': async ({ req, res, query }) => {
-      const raw = cookies(req).ink_oauth || '';
-      const [key, state, nextEnc] = raw.split(':');
-      const fail = (why) => html(res, 400, page('Sign in', note(esc(why), true) +
-        '<div class="actions"><a class="btn" href="/login">Try again</a></div>', { chrome: false }));
+    'POST /signup': async ({ req, res }) => {
+      if (signupClosed()) { res.writeHead(302, { location: '/login' }); return res.end(); }
+      const b = await readBody(req);
+      const email = String(b.email || '').trim().toLowerCase();
+      const password = String(b.password || '');
+      const back = (why) => html(res, 400, page('Create an account',
+        note(esc(why), true) + '<div class="actions"><a class="btn" href="/signup">Try again</a></div>',
+        { chrome: false }));
 
-      if (!key || !state) return fail('That sign-in did not start here. Begin again from the sign-in page.');
-      if (String(query.state || '') !== state) return fail('Sign-in could not be verified. Begin again from the sign-in page.');
+      if (!/^[^@\s]+@[^@\s]+$/.test(email)) return back('That does not look like an email address.');
+      const problem = passwordProblem(password);
+      if (problem) return back(problem);
+      if (q.userByEmail.get(email)) return back('There is already an account with that address. Sign in instead.');
 
-      const email = await emailFromCode(key, { code: String(query.code || ''), publicUrl, fetchImpl });
-      if (!email) {
-        // Most often a provider account with no verified address on it.
-        return fail(`${PROVIDERS[key] ? PROVIDERS[key].name : 'That provider'} did not return a verified email address.`);
-      }
-
-      let u = q.userByEmail.get(email);
-      if (!u) { u = { id: id(), email }; q.userInsert.run(u.id, email, now()); }
+      const u = { id: id(), email };
+      q.userInsert.run(u.id, email, now());
+      q.pwSet.run(u.id, await hashPassword(password), now());
       const sid = id(24); q.sessInsert.run(sid, u.id, now());
-      const next = nextEnc ? decodeURIComponent(nextEnc) : '/devices';
-      res.writeHead(302, {
-        location: next.startsWith('/') ? next : '/devices',
-        'set-cookie': [
-          `ink_session=${sid}; Path=/; HttpOnly; SameSite=Lax${securePart()}`,
-          'ink_oauth=; Path=/; Max-Age=0',
-        ],
-      });
+      res.writeHead(302, { location: '/devices', 'set-cookie': sessionCookie(sid) });
       res.end();
     },
 
     'POST /login': async ({ req, res }) => {
-      if (!devLogin()) { res.writeHead(302, { location: '/login' }); return res.end(); }
       const b = await readBody(req);
       const email = String(b.email || '').trim().toLowerCase();
-      if (!/^[^@\s]+@[^@\s]+$/.test(email)) {
-        return html(res, 400, page('Sign in', note('That does not look like an email address.', true) +
-          '<div class="actions"><a class="btn" href="/login">Try again</a></div>', { chrome: false }));
-      }
-      let u = q.userByEmail.get(email);
-      if (!u) { u = { id: id(), email }; q.userInsert.run(u.id, email, now()); }
+      const password = String(b.password || '');
+      // One message for every failure: which half was wrong is exactly what an
+      // attacker enumerating addresses wants to learn.
+      const refuse = (why = 'That email and password do not match.') => html(res, 400, page('Sign in',
+        note(esc(why), true) + '<div class="actions"><a class="btn" href="/login">Try again</a></div>',
+        { chrome: false }));
+
+      if (failedRecently(email)) return refuse('Too many attempts. Wait a few seconds and try again.');
+
+      const u = q.userByEmail.get(email);
+      const row = u ? q.pwGet.get(u.id) : null;
+      // Hash even when the account does not exist, so the reply takes the same
+      // time either way and does not reveal which addresses are registered.
+      const ok = await verifyPassword(password, row ? row.hash : 'scrypt$16384$8$1$AAAA$AAAA');
+      if (!u || !row || !ok) { noteFailure(email); return refuse(); }
+
+      attempts.delete(email);
       const sid = id(24); q.sessInsert.run(sid, u.id, now());
       const next = String(b.next || '/devices'); const safe = next.startsWith('/') ? next : '/devices';
-      res.writeHead(302, { location: safe, 'set-cookie': `ink_session=${sid}; Path=/; HttpOnly; SameSite=Lax${securePart()}` });
+      res.writeHead(302, { location: safe, 'set-cookie': sessionCookie(sid) });
       res.end();
+    },
+
+    // --- Passkeys -----------------------------------------------------------
+    // The challenge is minted here, kept in a short-lived cookie and used once.
+    // That is what stops a captured response being replayed later.
+
+    'GET /auth/passkey/options': async ({ res }) => {
+      const c = newChallenge();
+      json(res, 200, { challenge: c, rpId: rpIdFrom(publicUrl) }, {
+        'set-cookie': `ink_pk=${c}; Path=/; HttpOnly; SameSite=Lax; Max-Age=300${securePart()}`,
+      });
+    },
+
+    'POST /auth/passkey/verify': async ({ req, res }) => {
+      const expected = cookies(req).ink_pk;
+      const b = await readBody(req);
+      const clear = `ink_pk=; Path=/; Max-Age=0`;
+      if (!expected) return json(res, 400, { error: 'That sign-in did not start here.' }, { 'set-cookie': clear });
+
+      const cred = q.credById.get(String(b.id || ''));
+      if (!cred) return json(res, 400, { error: 'That passkey is not registered here.' }, { 'set-cookie': clear });
+
+      try {
+        const { counter } = verifyAssertion({
+          authenticatorData: b.authenticatorData, clientDataJSON: b.clientDataJSON, signature: b.signature,
+          publicKey: cred.public_key, expectedChallenge: expected, origin: originOf(publicUrl),
+          rpId: rpIdFrom(publicUrl), storedCounter: cred.counter,
+        });
+        q.credTouch.run(counter, now(), cred.cred_id);
+        const sid = id(24); q.sessInsert.run(sid, cred.user_id, now());
+        json(res, 200, { ok: true, next: '/devices' }, { 'set-cookie': [sessionCookie(sid), clear] });
+      } catch (e) {
+        json(res, 400, { error: 'That passkey could not be verified.' }, { 'set-cookie': clear });
+      }
+    },
+
+    'GET /auth/passkey/register-options': async ({ req, res }) => {
+      const u = requireUser(req, res); if (!u) return;
+      const c = newChallenge();
+      json(res, 200, {
+        challenge: c, rpId: rpIdFrom(publicUrl), rpName: 'InkAgent relay',
+        user: { id: Buffer.from(u.id).toString('base64url'), name: u.email, displayName: u.email },
+        exclude: q.credsForUser.all(u.id).map(r => r.cred_id),
+      }, { 'set-cookie': `ink_pk=${c}; Path=/; HttpOnly; SameSite=Lax; Max-Age=300${securePart()}` });
+    },
+
+    'POST /auth/passkey/register': async ({ req, res }) => {
+      const u = requireUser(req, res); if (!u) return;
+      const expected = cookies(req).ink_pk;
+      const b = await readBody(req);
+      const clear = `ink_pk=; Path=/; Max-Age=0`;
+      if (!expected) return json(res, 400, { error: 'That registration did not start here.' }, { 'set-cookie': clear });
+      try {
+        const reg = verifyRegistration({
+          attestationObject: b.attestationObject, clientDataJSON: b.clientDataJSON,
+          expectedChallenge: expected, origin: originOf(publicUrl), rpId: rpIdFrom(publicUrl),
+        });
+        if (q.credById.get(reg.credId)) return json(res, 400, { error: 'That passkey is already registered.' }, { 'set-cookie': clear });
+        const label = String(b.label || '').slice(0, 40) || 'Passkey';
+        q.credInsert.run(reg.credId, u.id, reg.publicKey, label, reg.counter, now());
+        json(res, 200, { ok: true }, { 'set-cookie': clear });
+      } catch (e) {
+        json(res, 400, { error: 'That passkey could not be registered.' }, { 'set-cookie': clear });
+      }
+    },
+
+    'GET /account': async ({ req, res }) => {
+      const u = requireUser(req, res); if (!u) return;
+      const creds = q.credsForUser.all(u.id);
+      html(res, 200, page('Account', `
+        <div class="card">
+          <div class="head"><h2>${esc(u.email)}</h2></div>
+          <div class="meta"><span>signed in with a password</span></div>
+        </div>
+
+        <h2 style="margin-top:1.5rem">Passkeys</h2>
+        <p class="muted small">A passkey signs you in with the fingerprint reader or screen lock you already use,
+        and cannot be phished or reused on another site.</p>
+
+        ${creds.length === 0 ? '<div class="empty"><strong>None yet</strong><p>Add one and you can skip the password on this device.</p></div>'
+          : creds.map(c => `<div class="card">
+              <div class="head"><h2>${esc(c.label)}</h2><span class="pill">${esc(when(c.last_used) === 'never' ? 'unused' : 'used ' + when(c.last_used))}</span></div>
+              <div class="meta"><span>added ${esc(when(c.created_at))}</span></div>
+              <div class="actions">
+                <form method="post" action="/account/passkey/delete" onsubmit="return confirm('Remove this passkey?')">
+                  <input type="hidden" name="id" value="${esc(c.cred_id)}"><button class="btn-danger">Remove</button>
+                </form>
+              </div></div>`).join('')}
+
+        <div class="actions"><button id="add" class="btn" type="button">Add a passkey</button></div>
+        <p id="msg" class="muted small" hidden></p>
+
+        <script>
+        (function () {
+          var b = document.getElementById('add'), msg = document.getElementById('msg');
+          if (!window.PublicKeyCredential) { b.hidden = true; msg.hidden = false;
+            msg.textContent = 'This browser does not support passkeys.'; return; }
+          var u8 = function (s) { s = s.replace(/-/g,'+').replace(/_/g,'/');
+            var raw = atob(s + '==='.slice((s.length + 3) % 4)), a = new Uint8Array(raw.length);
+            for (var i = 0; i < raw.length; i++) a[i] = raw.charCodeAt(i); return a; };
+          var b64 = function (buf) { var s = ''; var a = new Uint8Array(buf);
+            for (var i = 0; i < a.length; i++) s += String.fromCharCode(a[i]);
+            return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); };
+          b.addEventListener('click', async function () {
+            msg.hidden = false; msg.textContent = 'Follow your device prompt…';
+            try {
+              var o = await (await fetch('/auth/passkey/register-options')).json();
+              var cred = await navigator.credentials.create({ publicKey: {
+                challenge: u8(o.challenge),
+                rp: { id: o.rpId, name: o.rpName },
+                user: { id: u8(o.user.id), name: o.user.name, displayName: o.user.displayName },
+                pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+                authenticatorSelection: { residentKey: 'preferred', userVerification: 'preferred' },
+                excludeCredentials: (o.exclude || []).map(function (id) { return { type: 'public-key', id: u8(id) }; }),
+                timeout: 60000, attestation: 'none' } });
+              var r = await fetch('/auth/passkey/register', { method: 'POST',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ attestationObject: b64(cred.response.attestationObject),
+                  clientDataJSON: b64(cred.response.clientDataJSON),
+                  label: (navigator.platform || 'Passkey') }) });
+              var out = await r.json();
+              if (out.ok) location.reload(); else msg.textContent = out.error || 'That did not work.';
+            } catch (e) { msg.textContent = 'Passkey setup was cancelled or failed.'; }
+          });
+        })();
+        </script>`, { active: '/account', lead: 'How you sign in to this relay.' }));
+    },
+
+    'POST /account/passkey/delete': async ({ req, res }) => {
+      const u = requireUser(req, res); if (!u) return;
+      const b = await readBody(req);
+      q.credDelete.run(String(b.id || ''), u.id);
+      res.writeHead(302, { location: '/account' }); res.end();
     },
 
     'GET /logout': async ({ res }) => { res.writeHead(302, { location: '/login', 'set-cookie': 'ink_session=; Path=/; Max-Age=0' }); res.end(); },

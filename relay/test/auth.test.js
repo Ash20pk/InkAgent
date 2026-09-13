@@ -1,137 +1,222 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash, generateKeyPairSync, createSign } from 'node:crypto';
 import { startRelay } from './helpers.js';
-import { available, authorizeUrl, emailFromCode, PROVIDERS } from '../src/oauth.js';
+import { hashPassword, verifyPassword, passwordProblem } from '../src/password.js';
+import { verifyAssertion, verifyRegistration, rpIdFrom } from '../src/webauthn.js';
 
 let R;
 before(async () => { R = await startRelay(); });
 after(() => R.close());
 
-const withCreds = async (fn) => {
-  process.env.INK_OAUTH_GITHUB_ID = 'gh-id';
-  process.env.INK_OAUTH_GITHUB_SECRET = 'gh-secret';
-  try { await fn(); } finally {
-    delete process.env.INK_OAUTH_GITHUB_ID;
-    delete process.env.INK_OAUTH_GITHUB_SECRET;
+const post = (path, fields, cookie) => fetch(R.base + path, {
+  method: 'POST',
+  headers: { 'content-type': 'application/x-www-form-urlencoded', ...(cookie ? { cookie } : {}) },
+  body: new URLSearchParams(fields), redirect: 'manual',
+});
+
+// --- passwords --------------------------------------------------------------
+
+test('a stored password reveals nothing and still verifies', async () => {
+  const stored = await hashPassword('correct-horse-battery');
+  assert.ok(!stored.includes('correct-horse-battery'), 'the password is not in the record');
+  assert.match(stored, /^scrypt\$16384\$8\$1\$/, 'parameters travel with the hash');
+  assert.equal(await verifyPassword('correct-horse-battery', stored), true);
+  assert.equal(await verifyPassword('correct-horse-batterY', stored), false);
+});
+
+test('two accounts with the same password get different records', async () => {
+  const a = await hashPassword('same-password-here');
+  const b = await hashPassword('same-password-here');
+  assert.notEqual(a, b, 'salted, so one cracked hash does not crack the other');
+});
+
+test('a corrupt or empty record is a refusal, not a crash or a way in', async () => {
+  for (const junk of ['', 'nonsense', 'scrypt$$$$', 'bcrypt$x$y', null, undefined]) {
+    assert.equal(await verifyPassword('anything', junk), false, `refused: ${junk}`);
   }
-};
-
-test('a provider is only offered once both halves of its credentials exist', async () => {
-  assert.deepEqual(available(), [], 'nothing configured, nothing offered');
-  process.env.INK_OAUTH_GITHUB_ID = 'only-the-id';
-  assert.deepEqual(available(), [], 'half-configured is not configured');
-  delete process.env.INK_OAUTH_GITHUB_ID;
-  await withCreds(async () => assert.deepEqual(available(), ['github']));
 });
 
-test('the authorize URL carries the state and the callback, and never the secret', async () => {
-  await withCreds(async () => {
-    const u = new URL(authorizeUrl('github', { publicUrl: 'https://relay.test/', state: 'abc123' }));
-    assert.equal(u.origin + u.pathname, 'https://github.com/login/oauth/authorize');
-    assert.equal(u.searchParams.get('client_id'), 'gh-id');
-    assert.equal(u.searchParams.get('state'), 'abc123');
-    assert.equal(u.searchParams.get('redirect_uri'), 'https://relay.test/auth/callback');
-    assert.equal(u.searchParams.get('response_type'), 'code');
-    assert.ok(!u.toString().includes('gh-secret'), 'the secret never reaches the browser');
-  });
+test('length is what is asked for, not symbol soup', () => {
+  assert.match(passwordProblem('short'), /at least 10/);
+  assert.equal(passwordProblem('a reasonably long passphrase'), null);
+  assert.match(passwordProblem('x'.repeat(201)), /longer than 200/);
 });
 
-test('an unverified address is not an identity', async () => {
-  await withCreds(async () => {
-    const fetchImpl = async (url) => {
-      if (String(url).includes('access_token') || String(url).includes('/oauth/access_token')) {
-        return { ok: true, json: async () => ({ access_token: 't' }) };
-      }
-      return { ok: true, json: async () => ([{ email: 'nope@example.com', primary: true, verified: false }]) };
-    };
-    const email = await emailFromCode('github', { code: 'c', publicUrl: 'https://relay.test', fetchImpl });
-    assert.equal(email, null, 'GitHub address that was never verified is refused');
-  });
-});
+// --- sign-in ----------------------------------------------------------------
 
-test('the verified primary address becomes the identity', async () => {
-  await withCreds(async () => {
-    const fetchImpl = async (url) => {
-      if (String(url).includes('/oauth/access_token')) return { ok: true, json: async () => ({ access_token: 't' }) };
-      return { ok: true, json: async () => ([
-        { email: 'other@example.com', primary: false, verified: true },
-        { email: 'Real@Example.com', primary: true, verified: true },
-      ]) };
-    };
-    const email = await emailFromCode('github', { code: 'c', publicUrl: 'https://relay.test', fetchImpl });
-    assert.equal(email, 'real@example.com', 'primary, verified, and lower-cased');
-  });
-});
-
-test('a provider that refuses the exchange yields nothing rather than throwing', async () => {
-  await withCreds(async () => {
-    const fetchImpl = async () => ({ ok: false, json: async () => ({}) });
-    assert.equal(await emailFromCode('github', { code: 'bad', publicUrl: 'https://relay.test', fetchImpl }), null);
-    const throwing = async () => { throw new Error('network down'); };
-    assert.equal(await emailFromCode('github', { code: 'c', publicUrl: 'https://relay.test', fetchImpl: throwing }), null);
-  });
-});
-
-test('a callback nobody started cannot mint a session', async () => {
-  // No ink_oauth cookie: the state cannot be checked, so the request is refused
-  // rather than trusted.
-  const res = await fetch(R.base + '/auth/callback?p=github&code=x&state=y', { redirect: 'manual' });
-  assert.equal(res.status, 400);
-  assert.equal(res.headers.get('set-cookie'), null, 'no session issued');
-  assert.match(await res.text(), /did not start here/);
-});
-
-test('a callback whose state does not match the cookie is refused', async () => {
-  const res = await fetch(R.base + '/auth/callback?p=github&code=x&state=wrong', {
-    headers: { cookie: 'ink_oauth=github:right:%2Fdevices' }, redirect: 'manual',
-  });
-  assert.equal(res.status, 400);
-  assert.equal(res.headers.get('set-cookie'), null, 'no session issued');
-  assert.match(await res.text(), /could not be verified/);
-});
-
-test('starting a sign-in sets a short-lived state cookie and leaves for the provider', async () => {
-  await withCreds(async () => {
-    const res = await fetch(R.base + '/auth/start?p=github', { redirect: 'manual' });
-    assert.equal(res.status, 302);
-    const cookie = res.headers.get('set-cookie') || '';
-    assert.match(cookie, /^ink_oauth=github:/);
-    assert.match(cookie, /HttpOnly/);
-    assert.match(cookie, /Max-Age=600/, 'the state does not outlive the sign-in');
-    const state = cookie.split('ink_oauth=')[1].split(':')[1];
-    assert.equal(new URL(res.headers.get('location')).searchParams.get('state'), state,
-      'the state sent to the provider is the one in the cookie');
-  });
-});
-
-test('an unknown provider goes back to sign-in rather than anywhere else', async () => {
-  const res = await fetch(R.base + '/auth/start?p=myspace', { redirect: 'manual' });
+test('signing up creates a session; the same address cannot be taken twice', async () => {
+  const res = await post('/signup', { email: 'new@example.com', password: 'a-good-long-password' });
   assert.equal(res.status, 302);
-  assert.equal(res.headers.get('location'), '/login');
+  assert.match(res.headers.get('set-cookie') || '', /ink_session=/);
+
+  const again = await post('/signup', { email: 'new@example.com', password: 'another-long-password' });
+  assert.equal(again.status, 400);
+  assert.match(await again.text(), /already an account/);
 });
 
-test('with nothing configured the sign-in page says so instead of offering a way in', async () => {
-  const prev = process.env.INK_DEV_LOGIN;
-  delete process.env.INK_DEV_LOGIN;
+test('a wrong password and an unknown address fail identically', async () => {
+  await post('/signup', { email: 'real@example.com', password: 'a-good-long-password' });
+  const wrong = await post('/login', { email: 'real@example.com', password: 'not-the-password' });
+  const missing = await post('/login', { email: 'ghost@example.com', password: 'not-the-password' });
+
+  assert.equal(wrong.status, 400);
+  assert.equal(missing.status, 400);
+  // Any difference here is an oracle for which addresses have accounts.
+  assert.equal(await wrong.text(), await missing.text(), 'same reply either way');
+  assert.equal(wrong.headers.get('set-cookie'), null);
+  assert.equal(missing.headers.get('set-cookie'), null);
+});
+
+test('a short password is refused at signup', async () => {
+  const res = await post('/signup', { email: 'shorty@example.com', password: 'tiny' });
+  assert.equal(res.status, 400);
+  assert.match(await res.text(), /at least 10/);
+  const login = await post('/login', { email: 'shorty@example.com', password: 'tiny' });
+  assert.equal(login.headers.get('set-cookie'), null, 'no account was created');
+});
+
+test('repeated failures are throttled', async () => {
+  await post('/signup', { email: 'target@example.com', password: 'a-good-long-password' });
+  let throttled = false;
+  for (let i = 0; i < 8; i++) {
+    const res = await post('/login', { email: 'target@example.com', password: 'guess-' + i });
+    if (/Too many attempts/.test(await res.text())) { throttled = true; break; }
+  }
+  assert.ok(throttled, 'online guessing is slowed down');
+});
+
+test('signup can be closed once the accounts that should exist do', async () => {
+  process.env.INK_SIGNUP_CLOSED = '1';
   try {
-    const html = await (await fetch(R.base + '/login')).text();
-    assert.match(html, /No sign-in method configured/);
-    assert.doesNotMatch(html, /<form method="post" action="\/login">/, 'no open email box');
-
-    // And the endpoint itself refuses, not just the page.
-    const res = await fetch(R.base + '/login', {
-      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ email: 'intruder@example.com' }), redirect: 'manual',
-    });
-    assert.equal(res.headers.get('set-cookie'), null, 'no session for a posted email');
-  } finally {
-    if (prev !== undefined) process.env.INK_DEV_LOGIN = prev;
-  }
+    const page = await (await fetch(R.base + '/login')).text();
+    assert.doesNotMatch(page, /Create one/, 'no invitation to sign up');
+    const res = await post('/signup', { email: 'late@example.com', password: 'a-good-long-password' });
+    assert.equal(res.headers.get('set-cookie'), null, 'and the endpoint refuses too');
+  } finally { delete process.env.INK_SIGNUP_CLOSED; }
 });
 
-test('every provider declares the environment variables it needs', () => {
-  for (const [key, p] of Object.entries(PROVIDERS)) {
-    assert.ok(p.idEnv && p.secretEnv, `${key} names its credentials`);
-    assert.ok(typeof p.email === 'function', `${key} can resolve an address`);
-  }
+// --- passkeys ---------------------------------------------------------------
+// A real authenticator, in miniature: a P-256 key that signs what a browser
+// would sign, so the verifier is checked against genuine and forged responses.
+
+const RP_ID = 'relay.test', ORIGIN = 'http://relay.test';
+
+function authenticator() {
+  const { publicKey, privateKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+  const spki = publicKey.export({ format: 'der', type: 'spki' });
+  return {
+    publicKey: spki.toString('base64url'),
+    sign(challenge, { rpId = RP_ID, origin = ORIGIN, counter = 1, flags = 0x05 } = {}) {
+      const authData = Buffer.concat([
+        createHash('sha256').update(rpId).digest(),
+        Buffer.from([flags]),
+        (() => { const b = Buffer.alloc(4); b.writeUInt32BE(counter); return b; })(),
+      ]);
+      const clientDataJSON = Buffer.from(JSON.stringify({ type: 'webauthn.get', challenge, origin }));
+      const signer = createSign('SHA256');
+      signer.update(Buffer.concat([authData, createHash('sha256').update(clientDataJSON).digest()]));
+      signer.end();
+      return {
+        authenticatorData: authData.toString('base64url'),
+        clientDataJSON: clientDataJSON.toString('base64url'),
+        signature: signer.sign({ key: privateKey, dsaEncoding: 'der' }).toString('base64url'),
+      };
+    },
+  };
+}
+
+const assertWith = (a, challenge, opts = {}, storedCounter = 0) =>
+  verifyAssertion({ ...a.sign(challenge, opts), publicKey: a.publicKey, expectedChallenge: challenge,
+    origin: ORIGIN, rpId: RP_ID, storedCounter });
+
+test('a genuine passkey assertion verifies', () => {
+  const a = authenticator();
+  const out = assertWith(a, 'chal-1', { counter: 7 });
+  assert.equal(out.counter, 7);
+});
+
+test('a response for a different challenge is refused', () => {
+  const a = authenticator();
+  assert.throws(() => verifyAssertion({ ...a.sign('the-real-challenge'), publicKey: a.publicKey,
+    expectedChallenge: 'a-different-challenge', origin: ORIGIN, rpId: RP_ID, storedCounter: 0 }),
+    /challenge mismatch/, 'a captured response cannot be replayed against a new challenge');
+});
+
+test('a response from another origin is refused', () => {
+  const a = authenticator();
+  assert.throws(() => assertWith(a, 'chal-2', { origin: 'https://evil.example' }), /origin mismatch/);
+});
+
+test('a response for another relying party is refused', () => {
+  const a = authenticator();
+  assert.throws(() => assertWith(a, 'chal-3', { rpId: 'evil.example' }), /wrong relying party/);
+});
+
+test('someone else\'s key does not verify', () => {
+  const real = authenticator(), impostor = authenticator();
+  assert.throws(() => verifyAssertion({ ...impostor.sign('chal-4'), publicKey: real.publicKey,
+    expectedChallenge: 'chal-4', origin: ORIGIN, rpId: RP_ID, storedCounter: 0 }), /did not verify/);
+});
+
+test('a tampered signature does not verify', () => {
+  const a = authenticator();
+  const r = a.sign('chal-5');
+  const sig = Buffer.from(r.signature, 'base64url');
+  sig[sig.length - 1] ^= 0xff;
+  assert.throws(() => verifyAssertion({ ...r, signature: sig.toString('base64url'), publicKey: a.publicKey,
+    expectedChallenge: 'chal-5', origin: ORIGIN, rpId: RP_ID, storedCounter: 0 }), /did not verify/);
+});
+
+test('a counter that goes backwards suggests a clone and is refused', () => {
+  const a = authenticator();
+  assert.throws(() => assertWith(a, 'chal-6', { counter: 3 }, 9), /counter went backwards/);
+  // Authenticators that never increment report zero, which is not evidence.
+  assert.doesNotThrow(() => assertWith(a, 'chal-7', { counter: 0 }, 0));
+});
+
+test('a response with no user present is refused', () => {
+  const a = authenticator();
+  assert.throws(() => assertWith(a, 'chal-8', { flags: 0x00 }), /no user presence/);
+});
+
+test('registration rejects a response built for another relying party', () => {
+  assert.throws(() => verifyRegistration({
+    attestationObject: Buffer.from('a0', 'hex').toString('base64url'),
+    clientDataJSON: Buffer.from(JSON.stringify({ type: 'webauthn.create', challenge: 'c', origin: ORIGIN })).toString('base64url'),
+    expectedChallenge: 'c', origin: ORIGIN, rpId: RP_ID,
+  }));
+});
+
+test('the relying party is the relay host, not whatever is asked for', () => {
+  assert.equal(rpIdFrom('https://relay.inkagent.dev'), 'relay.inkagent.dev');
+  assert.equal(rpIdFrom('http://127.0.0.1:8787'), '127.0.0.1');
+  assert.equal(rpIdFrom('nonsense'), 'localhost');
+});
+
+test('a passkey sign-in that did not start here is refused', async () => {
+  const res = await fetch(R.base + '/auth/passkey/verify', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ id: 'whatever' }), redirect: 'manual',
+  });
+  assert.equal(res.status, 400);
+  const body = await res.json();
+  assert.match(body.error, /did not start here/);
+});
+
+test('the challenge endpoint issues a short-lived, single-use cookie', async () => {
+  const res = await fetch(R.base + '/auth/passkey/options');
+  const body = await res.json();
+  assert.ok(body.challenge && body.challenge.length >= 40);
+  assert.equal(body.rpId, 'relay.test');
+  const cookie = res.headers.get('set-cookie') || '';
+  assert.match(cookie, /ink_pk=/);
+  assert.match(cookie, /HttpOnly/);
+  assert.match(cookie, /Max-Age=300/);
+});
+
+test('registering a passkey requires being signed in', async () => {
+  const res = await fetch(R.base + '/auth/passkey/register-options', { redirect: 'manual' });
+  assert.equal(res.status, 302);
+  assert.match(res.headers.get('location'), /^\/login/);
 });
