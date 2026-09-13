@@ -788,6 +788,12 @@ void InkAgentWebServer::handleUpload(UploadState& state) const {
 
       if (state.error.isEmpty()) {
         state.success = true;
+        // Same slot the WebSocket path uses: the reader's own screen should say
+        // something landed, whichever way it arrived — including from another
+        // reader, where nobody is looking at a browser to see the result.
+        wsLastCompleteName = state.fileName;
+        wsLastCompleteSize = state.size;
+        wsLastCompleteAt = millis();
         const unsigned long elapsed = millis() - uploadStartTime;
         const float avgKbps = (elapsed > 0) ? (state.size / 1024.0) / (elapsed / 1000.0) : 0;
         const float writePercent = (elapsed > 0) ? (totalWriteTime * 100.0 / elapsed) : 0;

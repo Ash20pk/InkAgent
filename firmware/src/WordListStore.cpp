@@ -5,6 +5,8 @@
 
 #include <algorithm>
 
+#include "InkAgentSettings.h"
+
 void WordListStore::toJson(JsonDocument& doc) const {
   JsonArray arr = doc["words"].to<JsonArray>();
   for (const auto& w : words) {
@@ -39,7 +41,7 @@ bool WordListStore::fromJson(JsonVariantConst doc) {
 void WordListStore::add(const std::string& word, const std::string& book) {
   ensureLoaded();
   if (word.empty()) return;
-  const int32_t today = halClock.dayNumber();
+  const int32_t today = halClock.dayNumber(SETTINGS.statusBarSpec().clockUtcOffsetQ);
 
   auto it = std::find_if(words.begin(), words.end(), [&](const WordEntry& w) { return w.word == word; });
   if (it != words.end()) {

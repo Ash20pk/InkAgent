@@ -39,7 +39,7 @@ bool HalClock::getTime(uint8_t& hour, uint8_t& minute) const {
   return true;
 }
 
-int32_t HalClock::dayNumber() const {
+int32_t HalClock::dayNumber(const uint8_t utcOffsetQuarterHoursBiased) const {
   Rtc::DateTime dt;
   if (!_available || !_sdkRtc.now(dt)) return -1;
   // Howard Hinnant's days_from_civil, shifted to a 2000-01-01 epoch. Correct
@@ -52,7 +52,14 @@ int32_t HalClock::dayNumber() const {
   const uint32_t doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
   const uint32_t doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
   const int32_t daysFrom1970 = era * 146097 + static_cast<int32_t>(doe) - 719468;
-  return daysFrom1970 - 10957;  // 1970-01-01 -> 2000-01-01
+  const int32_t days2000 = daysFrom1970 - 10957;  // 1970-01-01 -> 2000-01-01
+
+  // Shift into local time and let the day roll at local midnight.
+  const int32_t offsetMinutes = (static_cast<int32_t>(utcOffsetQuarterHoursBiased) - 48) * 15;
+  const int32_t minuteOfDay = static_cast<int32_t>(dt.hour) * 60 + dt.minute + offsetMinutes;
+  if (minuteOfDay < 0) return days2000 - 1;
+  if (minuteOfDay >= 24 * 60) return days2000 + 1;
+  return days2000;
 }
 
 bool HalClock::formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHoursBiased, bool use12Hour) const {

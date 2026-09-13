@@ -34,10 +34,15 @@ class HalClock {
   // Returns false if RTC is not available.
   bool formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHoursBiased = 48, bool use12Hour = false) const;
 
-  // Days elapsed since 2000-01-01 in the RTC's own (UTC) calendar, or -1 when
-  // no RTC is present. A day number is all a review scheduler needs: it
-  // compares with <, survives a reboot, and stores in four bytes.
-  int32_t dayNumber() const;
+  // Days elapsed since 2000-01-01, or -1 when no RTC is present. A day number
+  // is all a review scheduler needs: it compares with <, survives a reboot, and
+  // stores in four bytes.
+  //
+  // utcOffsetQuarterHoursBiased shifts the day boundary to the reader's local
+  // midnight (48 = UTC+0, as elsewhere). Without it a word scheduled "tomorrow"
+  // becomes due at some arbitrary hour of the afternoon depending where the
+  // reader lives.
+  int32_t dayNumber(uint8_t utcOffsetQuarterHoursBiased = 48) const;
 
   // Sync the RTC from an NTP server. Requires WiFi to be connected.
   // Blocks for up to ~5s while waiting for SNTP response.

@@ -1074,6 +1074,11 @@ void SleepActivity::renderLastScreenSleepScreen() const {
 // there is none, which is the normal case on a device with no model connected
 // and must cost nothing.
 std::unique_ptr<engage::Screen> SleepActivity::readCachedAgentScreen() const {
+  // A question belongs to the passage it came from. If the reader has moved on
+  // to another book, it is not worth showing and is forgotten here rather than
+  // lingering until the next fetch happens to replace it.
+  InkAgentClient::dropEngageCacheUnlessFor(APP_STATE.openEpubPath.c_str());
+
   HalFile f;
   if (!Storage.openFileForRead("SLEEP", InkAgentClient::ENGAGE_CACHE, f)) return nullptr;
   const size_t size = f.size();

@@ -193,7 +193,10 @@ void DictionaryWordSelectActivity::performLookup() {
           break;
         }
       }
+      // Adding a word is invisible otherwise: the reader would find a review
+      // queue they never knowingly filled.
       WORD_LIST.add(headword, book);
+      LOG_DBG("WORDS", "captured %s", headword.c_str());
     }
     startActivityForResult(
         std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(headword),

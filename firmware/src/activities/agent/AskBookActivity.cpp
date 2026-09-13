@@ -116,7 +116,9 @@ void AskBookActivity::performAsk() {
     req.speedRatioPct = speedPct;
 
     const auto r = InkAgentClient::engage(req, InkAgentClient::ENGAGE_CACHE, answer.get(), answerCap);
-    if (!r.ok && answer[0] == '\0') {
+    if (!r.ok && InkAgentClient::lastHttpCode == InkAgentClient::kNoClock) {
+      snprintf(answer.get(), answerCap, "%s", tr(STR_ASK_NO_CLOCK));
+    } else if (!r.ok && answer[0] == '\0') {
       char heap[48];
       InkAgentClient::heapSummary(heap, sizeof(heap));
       snprintf(answer.get(), answerCap, "%s\n\n(code %d, %s)", tr(STR_ASK_RELAY_UNREACHABLE),
@@ -140,7 +142,9 @@ void AskBookActivity::performAsk() {
   req.arg = req.kind == inkagent::Kind::Translate ? I18N.get(StrId::STR_ASK_TRANSLATE_TARGET) : nullptr;
 
   const auto r = InkAgentClient::ask(req, answer.get(), answerCap);
-  if (!r.ok && InkAgentClient::lastHttpCode <= 0) {
+  if (!r.ok && InkAgentClient::lastHttpCode == InkAgentClient::kNoClock) {
+    snprintf(answer.get(), answerCap, "%s", tr(STR_ASK_NO_CLOCK));
+  } else if (!r.ok && InkAgentClient::lastHttpCode <= 0) {
     // Transport failure: put the numbers on screen, USB logging is gone by now.
     char heap[48];
     InkAgentClient::heapSummary(heap, sizeof(heap));

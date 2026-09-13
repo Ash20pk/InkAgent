@@ -493,8 +493,22 @@ void InkAgentWebServerActivity::renderServerRunning() const {
     renderer.drawCenteredText(SMALL_FONT_ID, startY, hostnameUrl.c_str(), true);
   }
 
+  renderLastReceived(renderer.getScreenHeight() - metrics.buttonHintsHeight - height10 * 2);
+
   const auto labels = mappedInput.mapLabels(tr(STR_EXIT), "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+}
+
+// The last file that arrived, above the hints. Without this the receiving
+// reader is silent: a transfer from a phone at least shows a result in the
+// browser, but one from another reader shows nothing anywhere.
+void InkAgentWebServerActivity::renderLastReceived(const int y) const {
+  if (!webServer) return;
+  const auto status = webServer->getWsUploadStatus();
+  if (status.lastCompleteName.empty()) return;
+  char line[128];
+  snprintf(line, sizeof(line), "%s%s", tr(STR_CALIBRE_RECEIVED), status.lastCompleteName.c_str());
+  renderer.drawCenteredText(UI_10_FONT_ID, y, line, true, EpdFontFamily::BOLD);
 }
 
 void InkAgentWebServerActivity::renderWifiIndicator(int subHeaderTop) const {

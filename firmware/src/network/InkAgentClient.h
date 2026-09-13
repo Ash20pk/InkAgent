@@ -41,8 +41,16 @@ class InkAgentClient {
   // screen itself is cached opaquely for the renderer.
   static EngageResult engage(const inkagent::EngageRequest& req, const char* cachePath, char* textOut, size_t textCap);
 
-  // Where the sleep canvas looks for the last screen the agent composed.
+  // Where the sleep canvas looks for the last screen the agent composed, and
+  // the book it was about. A question outlives the passage it came from
+  // otherwise, and an ambient screen asking about a book you finished last
+  // month is worse than an empty one.
   static constexpr const char* ENGAGE_CACHE = "/.inkagent/engage.json";
+  static constexpr const char* ENGAGE_CACHE_BOOK = "/.inkagent/engage.book";
+
+  // Forgets the cached screen unless it belongs to `bookPath`. Cheap enough to
+  // call whenever the current book is known.
+  static void dropEngageCacheUnlessFor(const char* bookPath);
 
   // Outcome of syncing the owner's apps from the relay onto the card.
   struct SyncResult {
@@ -60,6 +68,10 @@ class InkAgentClient {
 
   // Where the last synced set's version stamp is remembered.
   static constexpr const char* APPS_VERSION_FILE = "/.inkagent/apps_version";
+
+  // Distinct from a transport failure: the relay was never contacted because
+  // this device cannot judge a certificate without knowing the date.
+  static constexpr int kNoClock = -2;
 
   static int lastHttpCode;
   static void hardwareId(char out[13]);

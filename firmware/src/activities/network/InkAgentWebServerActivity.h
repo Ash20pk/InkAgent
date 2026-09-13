@@ -54,6 +54,7 @@ class InkAgentWebServerActivity final : public Activity {
 
   void renderServerRunning() const;
   void renderWifiIndicator(int subHeaderTop) const;
+  void renderLastReceived(int y) const;
 
   void onNetworkModeSelected(NetworkMode mode);
   void onWifiSelectionComplete(bool connected);

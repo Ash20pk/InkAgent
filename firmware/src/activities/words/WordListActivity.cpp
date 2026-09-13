@@ -8,6 +8,7 @@
 
 #include <algorithm>
 
+#include "InkAgentSettings.h"
 #include "WordListStore.h"
 #include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
@@ -19,7 +20,7 @@ WordListActivity::WordListActivity(GfxRenderer& renderer, MappedInputManager& ma
 void WordListActivity::onEnter() {
   Activity::onEnter();
   WORD_LIST.ensureLoaded();
-  today = halClock.dayNumber();
+  today = halClock.dayNumber(SETTINGS.statusBarSpec().clockUtcOffsetQ);
   loadQueue();
   requestUpdate();
 }

@@ -89,7 +89,7 @@ bool resolveSource(const char* name, const GfxRenderer& renderer, char* out, siz
     // a retrieval you either do or ignore at no cost. Empty when nothing is
     // due, and the renderer collapses the row.
     WORD_LIST.ensureLoaded();
-    const auto due = WORD_LIST.due(halClock.dayNumber());
+    const auto due = WORD_LIST.due(halClock.dayNumber(SETTINGS.statusBarSpec().clockUtcOffsetQ));
     if (!due.empty()) snprintf(out, cap, "%s", due.front()->word.c_str());
     return true;
   }

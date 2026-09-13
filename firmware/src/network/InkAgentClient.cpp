@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <ArduinoJson.h>
+#include <HalClock.h>
 #include <HalStorage.h>
 #include <InkAgentStore.h>
 #include <Logging.h>
@@ -13,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include "InkAgentState.h"
 #include "RelayCa.h"
 #include "RelayTask.h"
 #include "engage/AppCatalog.h"
@@ -45,6 +47,16 @@ int request(const char* method, const char* path, const char* body, size_t len, 
   if (!lock.held) {
     LOG_ERR("INKA", "%s: relay busy", path);
     return -1;
+  }
+
+  // Certificate validity is a date comparison, so a device that has never had
+  // its clock set cannot verify anything. setInsecure() did not care; pinning
+  // does. Saying so beats a generic "unreachable" the owner cannot act on.
+  if (!halClock.isAvailable() || halClock.dayNumber() < 0) {
+    LOG_ERR("INKA", "%s: no clock, cannot verify a certificate", path);
+    InkAgentClient::sdLog("clock unset: certificate cannot be validated");
+    InkAgentClient::lastHttpCode = InkAgentClient::kNoClock;
+    return InkAgentClient::kNoClock;
   }
 
   freeink::SecureHttpClient http;
@@ -237,8 +249,39 @@ InkAgentClient::EngageResult InkAgentClient::engage(const inkagent::EngageReques
     return out;
   }
 
+  // Record which book the question is about, so it can be dropped when the
+  // reader moves on rather than lingering on the sleep screen for months.
+  {
+    HalFile stamp;
+    if (Storage.openFileForWrite("INKA", ENGAGE_CACHE_BOOK, stamp)) {
+      const std::string& book = APP_STATE.openEpubPath;
+      stamp.write(reinterpret_cast<const uint8_t*>(book.data()), book.size());
+      stamp.close();
+    }
+  }
+
   out.ok = true;
   return out;
+}
+
+void InkAgentClient::dropEngageCacheUnlessFor(const char* bookPath) {
+  if (!Storage.exists(ENGAGE_CACHE)) return;
+
+  std::string cachedFor;
+  HalFile f;
+  if (Storage.openFileForRead("INKA", ENGAGE_CACHE_BOOK, f)) {
+    char buf[256] = {0};
+    const int n = f.read(reinterpret_cast<uint8_t*>(buf), sizeof(buf) - 1);
+    f.close();
+    if (n > 0) cachedFor.assign(buf, static_cast<size_t>(n));
+  }
+
+  // An unstamped cache is from before this existed: drop it rather than keep a
+  // question nothing can vouch for.
+  if (!cachedFor.empty() && bookPath != nullptr && cachedFor == bookPath) return;
+
+  Storage.remove(ENGAGE_CACHE);
+  Storage.remove(ENGAGE_CACHE_BOOK);
 }
 
 namespace {
