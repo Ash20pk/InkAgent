@@ -6,6 +6,7 @@
 #include <FontCacheManager.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#include <HalClock.h>
 #include <HalDisplay.h>
 #include <HalGPIO.h>
 #include <HalStorage.h>
@@ -18,13 +19,15 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <cstring>
 #include <limits>
 #include <string>
 
+#include "Epub/converters/DirectPixelWriter.h"
+#include "Epub/converters/DitherUtils.h"
 #include "Epub/converters/ImageDecoderFactory.h"
 #include "InkAgentSettings.h"
 #include "InkAgentState.h"
+#include "Xtc/XthImage.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -612,26 +615,28 @@ void SleepActivity::renderCustomSleepScreen() const {
 // sequence, used once for the sleep image. It never runs the multi-flash GC
 // waveform (0xF7) that FULL_REFRESH selects (#2471's blinking complaint).
 namespace {
-// A simple padlock built from primitives. `shackleLift` raises the arch (the
-// "open" transition frame). Drawn dark on a light ground.
-void drawPadlock(GfxRenderer& r, int cx, int cy, int w, int h, int shackleLift) {
-  const int bodyW = w, bodyH = h;
-  const int bodyX = cx - bodyW / 2, bodyY = cy - bodyH / 2;
-  const int stroke = std::max(3, w / 12);
-  // Body
-  r.fillRect(bodyX, bodyY, bodyW, bodyH, true);
-  // Keyhole (light): a small round-ish hole + slot
-  const int khR = std::max(3, w / 10);
-  r.fillRect(cx - khR, bodyY + bodyH / 3 - khR, khR * 2, khR * 2, false);
-  r.fillRect(cx - stroke / 2, bodyY + bodyH / 3, stroke, bodyH / 3, false);
-  // Shackle: an inverted-U outline above the body, lifted by shackleLift.
-  const int shW = bodyW * 3 / 5;
+// Small padlock as a level predicate rather than a set of draw calls: the four-
+// grey path paints the same pixels three times (B/W base, then each plane), and
+// a predicate keeps the glyph identical across all of them.
+//
+// Returns 0 (black) or 3 (white) inside the glyph, -1 outside. Filled white with
+// a black outline so it reads over either a light or a dark wallpaper.
+int lockGlyphLevel(const int x, const int y, const int cx, const int topY, const int w) {
+  const int bodyH = (w * 3) / 4;
+  const int bodyY = topY + w / 2;
+  const int bodyX = cx - w / 2;
+  const int shW = (w * 3) / 5;
   const int shX = cx - shW / 2;
-  const int shTop = bodyY - shW / 2 - shackleLift;
-  const int shBottom = bodyY + stroke;                                         // overlap into the body when closed
-  r.drawLine(shX, shBottom, shX, shTop + shW / 2, stroke, true);               // left post
-  r.drawLine(shX + shW, shBottom, shX + shW, shTop + shW / 2, stroke, true);   // right post
-  r.drawLine(shX, shTop + shW / 2, shX + shW, shTop + shW / 2, stroke, true);  // top bar (flat arch)
+
+  if (x >= bodyX && x < bodyX + w && y >= bodyY && y < bodyY + bodyH) {
+    const bool border = x == bodyX || x == bodyX + w - 1 || y == bodyY || y == bodyY + bodyH - 1;
+    return border ? 0 : 3;
+  }
+  if (y >= topY && y < bodyY) {
+    if (x == shX || x == shX + shW) return 0;             // shackle posts
+    if (y == topY && x > shX && x < shX + shW) return 0;  // shackle top
+  }
+  return -1;
 }
 }  // namespace
 
@@ -639,9 +644,6 @@ void SleepActivity::renderLockSleepScreen() const {
   const int pageWidth = renderer.getScreenWidth();
   const int pageHeight = renderer.getScreenHeight();
   const int cx = pageWidth / 2;
-  const int lockCy = pageHeight / 2 - 20;
-  const int lockW = pageWidth / 4;
-  const int lockH = lockW;
 
   // Wallpaper: /lock.{jpg,jpeg,png,bmp} on the SD root if present (drawn into
   // the framebuffer without flushing, so the padlock + hint overlay on top);
@@ -649,6 +651,13 @@ void SleepActivity::renderLockSleepScreen() const {
   // Wallpaper is whatever image the user picked in the web file manager
   // ("Set as wallpaper"); its path lives in /.inkagent/wallpaper.txt. Drawn
   // into the framebuffer without flushing so the padlock + hint overlay on top.
+  // Held across the grayscale passes below: an XTH wallpaper is re-read per pass
+  // otherwise, and it is the only source that carries real four-level tone.
+  xtc::XthImage xthWallpaper;
+  bool xthReady = false;
+  int xthX = 0;
+  int xthY = 0;
+
   auto drawWallpaper = [&]() -> bool {
     std::string path;
     {
@@ -671,6 +680,27 @@ void SleepActivity::renderLockSleepScreen() const {
                         renderer.drawBitmap1Bit(bmp, place.x, place.y, pageWidth, pageHeight);
         bmpFile.close();
         if (ok) return true;
+      }
+    } else if (ext == ".xth" || ext == ".xtg") {
+      // Pre-rendered page: draw 1:1, centred. The sleep path keeps its single
+      // HALF refresh, so the four levels have to be re-dithered down to ink or
+      // paper. Thresholding them instead (levels 0-1 to ink) throws away the
+      // brightness the dithering encoded and turns two thirds of a typical photo
+      // solid black; an ordered dither on the level's grey value keeps the
+      // original tone.
+      if (xthWallpaper.load(path) && xthWallpaper.width() <= pageWidth && xthWallpaper.height() <= pageHeight) {
+        xthX = (pageWidth - xthWallpaper.width()) / 2;
+        xthY = (pageHeight - xthWallpaper.height()) / 2;
+        xthReady = true;
+        // B/W base only. The four levels are re-dithered to ink or paper here;
+        // if the grayscale passes below run, they replace this entirely.
+        for (uint16_t y = 0; y < xthWallpaper.height(); y++) {
+          for (uint16_t x = 0; x < xthWallpaper.width(); x++) {
+            const uint8_t grey = static_cast<uint8_t>(xthWallpaper.level(x, y) * 85);
+            if (applyBayerDither1Bit(grey, xthX + x, xthY + y) == 0) renderer.drawPixel(xthX + x, xthY + y, true);
+          }
+        }
+        return true;
       }
     } else if (auto* decoder = ImageDecoderFactory::getDecoder(path)) {
       RenderConfig cfg;
@@ -699,14 +729,67 @@ void SleepActivity::renderLockSleepScreen() const {
   // clean waveform before the panel powers down. (An earlier FAST pre-frame
   // "lock animation" left the panel half-updated -> a stuck-looking screen,
   // especially when sleeping from a non-reader screen.)
+  constexpr int lockWidth = 14;
+  const int lockTopY = pageHeight - lockWidth * 4;
+  // B/W base: plain pixels. The grayscale passes need the glyph written through
+  // the same DirectPixelWriter as the wallpaper, or it is not encoded into the
+  // planes at all and the planes then overwrite the base - which is why the lock
+  // was invisible once the four-grey path took over.
+  const auto drawLockBw = [&]() {
+    for (int y = lockTopY; y < lockTopY + lockWidth * 2 && y < pageHeight; y++) {
+      for (int x = cx - lockWidth; x <= cx + lockWidth && x < pageWidth; x++) {
+        const int lv = lockGlyphLevel(x, y, cx, lockTopY, lockWidth);
+        if (lv >= 0) renderer.drawPixel(x, y, lv == 0);
+      }
+    }
+  };
+  const auto drawLockPlane = [&](DirectPixelWriter& pw) {
+    for (int y = lockTopY; y < lockTopY + lockWidth * 2 && y < pageHeight; y++) {
+      pw.beginRow(y);
+      for (int x = cx - lockWidth; x <= cx + lockWidth && x < pageWidth; x++) {
+        const int lv = lockGlyphLevel(x, y, cx, lockTopY, lockWidth);
+        if (lv >= 0) pw.writePixel(x, static_cast<uint8_t>(lv));
+      }
+    }
+  };
+
   paintBase();
-  drawPadlock(renderer, cx, lockCy, lockW, lockH, 0);
-  const int hintY = lockCy + lockH / 2 + 44;
-  const int plateH = renderer.getLineHeight(UI_12_FONT_ID) + 12;
-  const int plateW = renderer.getTextWidth(UI_12_FONT_ID, tr(STR_UNLOCK_HINT), EpdFontFamily::BOLD) + 28;
-  renderer.fillRect(cx - plateW / 2, hintY - 8, plateW, plateH, false);  // clear a legible strip
-  renderer.drawRect(cx - plateW / 2, hintY - 8, plateW, plateH, 1, true);
-  renderer.drawCenteredText(UI_12_FONT_ID, hintY, tr(STR_UNLOCK_HINT), true, EpdFontFamily::BOLD);
+  drawLockBw();
+
+  // An XTH wallpaper carries four real grey levels. Rendering it 1-bit means
+  // re-dithering an already-dithered picture, and the two patterns beat against
+  // each other into visible mottling - so drive the panel's four greys instead,
+  // the same plane sequence the cover sleep screen uses.
+  if (xthReady && renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported()) {
+    if (renderer.displayGrayscaleBase(HalDisplay::GrayscaleMode::Absolute)) {
+      bool planesReady = true;
+      for (const auto plane : {GfxRenderer::GRAYSCALE_LSB, GfxRenderer::GRAYSCALE_MSB}) {
+        renderer.clearScreen(0xFF);
+        renderer.setRenderMode(plane);
+        DirectPixelWriter pw;
+        pw.init(renderer);
+        for (uint16_t y = 0; y < xthWallpaper.height(); y++) {
+          pw.beginRow(xthY + y);
+          for (uint16_t x = 0; x < xthWallpaper.width(); x++) {
+            pw.writePixel(xthX + x, xthWallpaper.level(x, y));
+          }
+        }
+        drawLockPlane(pw);
+        if (plane == GfxRenderer::GRAYSCALE_LSB) {
+          renderer.copyGrayscaleLsbBuffers();
+        } else {
+          renderer.copyGrayscaleMsbBuffers();
+        }
+      }
+      if (planesReady) {
+        renderer.displayGrayBuffer();
+        renderer.setRenderMode(GfxRenderer::BW);
+        return;
+      }
+      renderer.setRenderMode(GfxRenderer::BW);
+    }
+  }
+
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
