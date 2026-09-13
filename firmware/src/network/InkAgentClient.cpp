@@ -14,6 +14,7 @@
 #include <string>
 #include <vector>
 
+#include "BuildDate.h"
 #include "InkAgentState.h"
 #include "RelayCa.h"
 #include "RelayTask.h"
@@ -49,10 +50,16 @@ int request(const char* method, const char* path, const char* body, size_t len, 
     return -1;
   }
 
-  // Certificate validity is a date comparison, so a device that has never had
-  // its clock set cannot verify anything. setInsecure() did not care; pinning
-  // does. Saying so beats a generic "unreachable" the owner cannot act on.
-  if (!halClock.isAvailable() || halClock.dayNumber() < 0) {
+  // Certificate validity is a date comparison, so a device whose clock is wrong
+  // cannot verify anything — and "wrong" includes an RTC that is present and
+  // simply never set, which is how this shipped: pairing failed with wolfSSL
+  // -150 (ASN_BEFORE_DATE_E) because the root's notBefore was in the device's
+  // future. An absent clock was already handled; a default one was not.
+  //
+  // The floor is this firmware's own build date. A reader cannot legitimately
+  // believe it is earlier than the software it is running, and using the build
+  // date means the check keeps working without anyone remembering to move it.
+  if (!halClock.isAvailable() || halClock.dayNumber() < inkagent::kBuildDayNumber) {
     LOG_ERR("INKA", "%s: no clock, cannot verify a certificate", path);
     InkAgentClient::sdLog("clock unset: certificate cannot be validated");
     InkAgentClient::lastHttpCode = InkAgentClient::kNoClock;

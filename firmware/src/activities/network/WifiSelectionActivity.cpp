@@ -15,6 +15,7 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/BuildDate.h"
 
 namespace fui = freeink::ui;
 
@@ -478,8 +479,8 @@ void WifiSelectionActivity::attemptConnection() {
   const esp_err_t macResult = esp_read_mac(mac, ESP_MAC_WIFI_STA);
   if (macResult == ESP_OK) {
     char hostname[sizeof("InkAgent-") + 12];
-    snprintf(hostname, sizeof(hostname), "InkAgent-%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3],
-             mac[4], mac[5]);
+    snprintf(hostname, sizeof(hostname), "InkAgent-%02X%02X%02X%02X%02X%02X", mac[0], mac[1], mac[2], mac[3], mac[4],
+             mac[5]);
     WiFi.setHostname(hostname);
   } else {
     LOG_ERR("WIFI", "Failed to read station MAC for hostname (err=%d)", static_cast<int>(macResult));
@@ -517,10 +518,17 @@ void WifiSelectionActivity::checkConnectionStatus() {
             WiFi.RSSI());
 #endif
 
-    // Sync RTC from NTP on the first successful WiFi connection only. The DS3231
-    // drifts ~2 ppm so one sync is enough; users can force a re-sync from
-    // Settings > Customise Status Bar > Sync clock now.
-    if (halClock.isAvailable() && !SETTINGS.clockHasBeenSynced) {
+    // Sync the RTC from NTP on the first successful WiFi connection. The DS3231
+    // drifts ~2 ppm so one sync is normally enough; users can force a re-sync
+    // from Settings > Customise Status Bar > Sync clock now.
+    //
+    // Also re-sync whenever the clock is obviously wrong, whatever the debounce
+    // flag says. An RTC that loses its time after having been synced once —
+    // flat coin cell, power removed — would otherwise never be corrected, and
+    // since the relay's certificate is checked against the date, that leaves
+    // the device permanently unable to reach it.
+    const bool clockLooksWrong = halClock.isAvailable() && halClock.dayNumber() < inkagent::kBuildDayNumber;
+    if (halClock.isAvailable() && (!SETTINGS.clockHasBeenSynced || clockLooksWrong)) {
       if (halClock.syncFromNTP()) {
         SETTINGS.clockHasBeenSynced = 1;
         SETTINGS.saveToFile();
