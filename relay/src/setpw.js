@@ -20,21 +20,44 @@ if (!email) {
   process.exit(2);
 }
 
-function ask(prompt) {
-  const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+// A terminal and a pipe need different handling, and pretending otherwise is
+// why this failed twice. On a terminal, readline prompts and the echo is
+// suppressed. On a pipe every line arrives at once, so readline's question()
+// misses all but the first — the input is read up front and handed out
+// instead.
+const interactive = Boolean(process.stdin.isTTY);
+let piped = null;
+
+async function readAllStdin() {
+  const chunks = [];
+  for await (const c of process.stdin) chunks.push(c);
+  return Buffer.concat(chunks).toString('utf8').split(/\r?\n/);
+}
+
+const rl = interactive
+  ? createInterface({ input: process.stdin, output: process.stdout, terminal: true })
+  : null;
+
+async function ask(prompt) {
+  if (!interactive) {
+    if (piped === null) piped = await readAllStdin();
+    return String(piped.shift() ?? '').trim();
+  }
   return new Promise((resolve) => {
-    // Nothing echoes: this is typed on a shared terminal often enough to matter.
-    const onData = (ch) => { if (ch.toString() !== '\r' && ch.toString() !== '\n') process.stdout.write(' '); };
-    process.stdout.write(prompt);
-    process.stdin.on('data', onData);
-    rl.question('', (answer) => {
-      process.stdin.off('data', onData);
+    const hide = (ch) => {
+      const c = ch.toString();
+      if (c !== '\r' && c !== '\n') process.stdout.write('\u0008 \u0008');
+    };
+    process.stdin.on('data', hide);
+    rl.question(prompt, (answer) => {
+      process.stdin.off('data', hide);
       process.stdout.write('\n');
-      rl.close();
-      resolve(answer);
+      resolve(answer.trim());
     });
   });
 }
+
+const done = (code) => { if (rl) rl.close(); process.exit(code); };
 
 const db = new DatabaseSync(process.env.INK_DB || '/data/inkagent.sqlite');
 const user = db.prepare('SELECT id, email FROM users WHERE email = ?').get(email);
@@ -49,12 +72,12 @@ const again = await ask('Again: ');
 
 if (password !== again) {
   console.error('Those did not match. Nothing was changed.');
-  process.exit(1);
+  done(1);
 }
 const problem = passwordProblem(password);
 if (problem) {
   console.error(problem + ' Nothing was changed.');
-  process.exit(1);
+  done(1);
 }
 
 const hash = await hashPassword(password);
@@ -67,9 +90,10 @@ db.prepare(`INSERT INTO passwords (user_id,hash,updated_at) VALUES (?,?,?)
 const stored = db.prepare('SELECT hash FROM passwords WHERE user_id = ?').get(user.id);
 if (!(await verifyPassword(password, stored.hash))) {
   console.error('The password was written but does not verify. Nothing can sign in with it; investigate before relying on this.');
-  process.exit(1);
+  done(1);
 }
 
 // Existing sessions survive on purpose: changing your own password from the
 // server should not sign you out of the browser you are already using.
 console.log(`Password set for ${user.email}. Sign in, then add a passkey under Account.`);
+done(0);

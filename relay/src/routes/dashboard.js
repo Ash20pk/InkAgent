@@ -346,12 +346,12 @@ export function dashboardRoutes(db, { devTokens, publicUrl = process.env.PUBLIC_
         (function () {
           var b = document.getElementById('pk'), msg = document.getElementById('pkmsg');
           if (!window.PublicKeyCredential) { b.hidden = true; return; }
-          var u8 = function (s) { s = s.replace(/-/g,'+').replace(/_/g,'/');
+          var u8 = function (s) { s = s.split('-').join('+').split('_').join('/');
             var raw = atob(s + '==='.slice((s.length + 3) % 4)), a = new Uint8Array(raw.length);
             for (var i = 0; i < raw.length; i++) a[i] = raw.charCodeAt(i); return a; };
           var b64 = function (buf) { var s = ''; var a = new Uint8Array(buf);
             for (var i = 0; i < a.length; i++) s += String.fromCharCode(a[i]);
-            return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); };
+            return btoa(s).split('+').join('-').split('/').join('_').replace(/=+$/,''); };
           b.addEventListener('click', async function () {
             msg.hidden = false; msg.textContent = 'Waiting for your passkey…';
             try {
@@ -363,8 +363,7 @@ export function dashboardRoutes(db, { devTokens, publicUrl = process.env.PUBLIC_
                 body: JSON.stringify({ id: cred.id,
                   authenticatorData: b64(cred.response.authenticatorData),
                   clientDataJSON: b64(cred.response.clientDataJSON),
-                  signature: b64(cred.response.signature),
-                  next: ${JSON.stringify('')} || undefined }) });
+                  signature: b64(cred.response.signature) }) });
               var out = await r.json();
               if (out.ok) { location.href = out.next || '/devices'; }
               else { msg.textContent = out.error || 'That passkey was not recognised.'; }
@@ -538,12 +537,12 @@ export function dashboardRoutes(db, { devTokens, publicUrl = process.env.PUBLIC_
           var b = document.getElementById('add'), msg = document.getElementById('msg');
           if (!window.PublicKeyCredential) { b.hidden = true; msg.hidden = false;
             msg.textContent = 'This browser does not support passkeys.'; return; }
-          var u8 = function (s) { s = s.replace(/-/g,'+').replace(/_/g,'/');
+          var u8 = function (s) { s = s.split('-').join('+').split('_').join('/');
             var raw = atob(s + '==='.slice((s.length + 3) % 4)), a = new Uint8Array(raw.length);
             for (var i = 0; i < raw.length; i++) a[i] = raw.charCodeAt(i); return a; };
           var b64 = function (buf) { var s = ''; var a = new Uint8Array(buf);
             for (var i = 0; i < a.length; i++) s += String.fromCharCode(a[i]);
-            return btoa(s).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); };
+            return btoa(s).split('+').join('-').split('/').join('_').replace(/=+$/,''); };
           b.addEventListener('click', async function () {
             msg.hidden = false; msg.textContent = 'Follow your device prompt…';
             try {
@@ -553,7 +552,7 @@ export function dashboardRoutes(db, { devTokens, publicUrl = process.env.PUBLIC_
                 rp: { id: o.rpId, name: o.rpName },
                 user: { id: u8(o.user.id), name: o.user.name, displayName: o.user.displayName },
                 pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
-                authenticatorSelection: { residentKey: 'preferred', userVerification: 'preferred' },
+                authenticatorSelection: { residentKey: 'required', requireResidentKey: true, userVerification: 'preferred' },
                 excludeCredentials: (o.exclude || []).map(function (id) { return { type: 'public-key', id: u8(id) }; }),
                 timeout: 60000, attestation: 'none' } });
               var r = await fetch('/auth/passkey/register', { method: 'POST',

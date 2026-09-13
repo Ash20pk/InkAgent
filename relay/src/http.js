@@ -6,7 +6,14 @@ export function json(res, status, body, headers = {}) {
   res.end(buf);
 }
 export function html(res, status, body, headers = {}) {
-  res.writeHead(status, { 'content-type': 'text/html; charset=utf-8', ...headers });
+  // Never cached. Every page here reflects live state — which readers are
+  // paired, whether a model is connected — and a browser holding yesterday's
+  // copy looks exactly like a deploy that did not take.
+  res.writeHead(status, {
+    'content-type': 'text/html; charset=utf-8',
+    'cache-control': 'no-store, must-revalidate',
+    ...headers,
+  });
   res.end(body);
 }
 export async function readBody(req, limit = 8192) {
