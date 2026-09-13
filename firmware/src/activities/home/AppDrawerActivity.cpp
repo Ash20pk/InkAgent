@@ -4,6 +4,7 @@
 #include <Logging.h>
 
 #include <algorithm>
+#include <cstring>
 
 #include "OpdsServerStore.h"
 #include "activities/browser/OpdsBookBrowserActivity.h"
@@ -15,6 +16,7 @@
 #include "components/UITheme.h"
 #include "components/icons/drawerIcons.h"
 #include "components/icons/listIcons.h"
+#include "engage/ManifestActivity.h"
 #include "fontIds.h"
 
 namespace {
@@ -38,6 +40,26 @@ void blitIcon(const GfxRenderer& renderer, const freeink::Icon& icon, const int 
       if (!transparent) renderer.drawPixel(x + col, y + row);
     }
   }
+}
+
+// A manifest names an icon as a string, resolved against this table. Unknown
+// names fall back rather than failing the app: an icon is not worth refusing a
+// screen over, and it keeps the format from being a place to smuggle in
+// arbitrary asset paths.
+const freeink::Icon& iconByName(const char* name) {
+  if (name == nullptr || name[0] == '\0') return icon_apps_32;
+  if (strcmp(name, "book") == 0) return icon_book_32;
+  if (strcmp(name, "library") == 0) return icon_library_32;
+  if (strcmp(name, "bookmark") == 0) return icon_bookmark_32;
+  if (strcmp(name, "inbox") == 0) return icon_inbox_32;
+  if (strcmp(name, "words") == 0) return icon_words_32;
+  if (strcmp(name, "settings") == 0) return icon_settings_32;
+  if (strcmp(name, "info") == 0) return icon_info_32;
+  if (strcmp(name, "clock") == 0 || strcmp(name, "sun") == 0) return icon_sun_32;
+  if (strcmp(name, "wifi") == 0) return icon_wifi_32;
+  if (strcmp(name, "folder") == 0) return icon_folder_32;
+  if (strcmp(name, "file") == 0) return icon_file_32;
+  return icon_apps_32;
 }
 
 const freeink::Icon& iconFor(const int index, const StrId label) {
@@ -78,6 +100,12 @@ void AppDrawerActivity::onEnter() {
   // Apps registered under src/apps/ land after the built-ins, in link order.
   for (const inkapp::AppInfo* app = inkapp::apps(); app != nullptr; app = app->next) {
     entries.push_back({Target::REGISTERED_APP, StrId::STR_APPS, app});
+  }
+
+  // Then apps that are just files in /Apps, which need no firmware build.
+  catalog = engage::scanApps();
+  for (size_t i = 0; i < catalog.size(); i++) {
+    entries.push_back({Target::CATALOG_APP, StrId::STR_APPS, nullptr, static_cast<int>(i)});
   }
 
   selectedIndex = 0;
@@ -130,12 +158,15 @@ void AppDrawerActivity::render(RenderLock&&) {
     const int tileX = grid.originX + col * grid.tileWidth;
     const int tileY = grid.originY + row * grid.tileHeight;
 
-    const freeink::Icon& icon = entries[i].app != nullptr && entries[i].app->icon != nullptr
-                                    ? *entries[i].app->icon
+    const freeink::Icon& icon = entries[i].app != nullptr && entries[i].app->icon != nullptr ? *entries[i].app->icon
+                                : entries[i].catalogIndex >= 0
+                                    ? iconByName(catalog[entries[i].catalogIndex].icon.c_str())
                                     : iconFor(static_cast<int>(i), entries[i].label);
     blitIcon(renderer, icon, tileX + (grid.tileWidth - ICON_SIZE) / 2, tileY + metrics.verticalSpacing);
 
-    const char* label = entries[i].app != nullptr ? entries[i].app->name : I18n::getInstance().get(entries[i].label);
+    const char* label = entries[i].app != nullptr      ? entries[i].app->name
+                        : entries[i].catalogIndex >= 0 ? catalog[entries[i].catalogIndex].name.c_str()
+                                                       : I18n::getInstance().get(entries[i].label);
     const int labelY = tileY + metrics.verticalSpacing + ICON_SIZE + metrics.verticalSpacing;
     UITheme::drawCenteredText(renderer, Rect{tileX, labelY, grid.tileWidth, renderer.getLineHeight(UI_10_FONT_ID)},
                               UI_10_FONT_ID, labelY, label);
@@ -239,6 +270,13 @@ void AppDrawerActivity::activate(const Target target) {
     case Target::READ_LATER:
       push(makeUniqueNoThrow<ReadLaterActivity>(renderer, mappedInput), "Read Later");
       break;
+    case Target::CATALOG_APP: {
+      const int idx = entries[selectedIndex].catalogIndex;
+      if (idx < 0 || idx >= static_cast<int>(catalog.size())) break;
+      push(makeUniqueNoThrow<ManifestActivity>(renderer, mappedInput, catalog[idx].path, catalog[idx].name),
+           catalog[idx].name.c_str());
+      break;
+    }
     case Target::REGISTERED_APP:
       break;  // handled above
   }

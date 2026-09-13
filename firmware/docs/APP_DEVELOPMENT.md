@@ -168,6 +168,98 @@ Pillow. Keep generated headers inside your app's folder.
 Note the SDK's vendored `lucide/` directory is excluded from its export and ships
 empty, so fetch the SVGs you need from the upstream Lucide repository.
 
+## Apps that are just files
+
+Everything above compiles an app into the firmware. There is a second kind that
+does not: a **manifest**, a JSON file in `/Apps` on the SD card. It appears in
+the drawer on the next open, with no build and no reflash.
+
+```json
+{
+  "name": "Status",
+  "icon": "info",
+  "title": "Status",
+  "rows": [
+    {"kind": "kv",   "label": "Reading",  "value": {"src": "reading.title"}},
+    {"kind": "kv",   "label": "Progress", "value": {"src": "reading.percent"}},
+    {"kind": "rule", "gapAfter": 2},
+    {"kind": "kv",   "label": "Battery",  "value": {"src": "device.battery"}},
+    {"kind": "text", "prefix": "Due to recall: ", "text": {"src": "review.word"}, "center": true}
+  ]
+}
+```
+
+Copy that to `/Apps/status.json` and open the drawer. `examples/apps/` has it
+and one other to start from.
+
+### What a manifest can say
+
+| Field | Meaning |
+| --- | --- |
+| `name` | Tile label. A literal string, required — a tile with no label cannot be chosen deliberately. |
+| `icon` | One of `book`, `library`, `bookmark`, `inbox`, `words`, `settings`, `info`, `clock`, `wifi`, `folder`, `file`. Anything else falls back to the generic app icon. |
+| `title` | Header text. A literal, or `{"src": "..."}`. |
+| `rows` | Up to 16 rows, drawn in order. |
+
+Row kinds:
+
+| `kind` | Draws |
+| --- | --- |
+| `text` | One line. `text` is a literal or a binding; `bold`, `center` and `prefix` are optional. |
+| `kv` | A small `label` with a larger `value` beneath it. The value wraps to two lines. |
+| `rule` | A horizontal divider. |
+| `logo` | The product mark, centred. |
+
+Every row takes `gapAfter`: the space below it, in multiples of the theme's
+vertical spacing, 0 to 4.
+
+A `text` row whose value resolves to nothing is **collapsed entirely** — it
+takes no space and its `prefix` disappears with it. That is how an optional row
+works, and it is why the format has no conditionals.
+
+### What a manifest cannot say
+
+There is no `if`, no loop, no expression and no arithmetic. There is no way to
+name a data source the firmware does not already expose, no way to reach the
+network, and no way to run for longer than the screen is on.
+
+This is the point, not a limitation waiting to be lifted. A third-party app on
+this device cannot poll, cannot notify, cannot accumulate an unread count and
+cannot follow you into the book. The ceiling is what makes it safe to let
+strangers ship apps for a device meant to be undistracting.
+
+If you find yourself needing a branch, the answer is a data source, not a
+conditional: compute it in C++ where the memory and the whitelist are visible,
+and bind a row to the result.
+
+### Data sources
+
+A value is either a literal string or `{"src": "<name>"}`. The whitelist lives
+in `src/engage/DataSource.cpp`:
+
+| Source | Value |
+| --- | --- |
+| `device.version` | Release version, dev suffix stripped |
+| `device.model` | `Xteink X3` / `Xteink X4` |
+| `device.screen` | `800 x 480` |
+| `device.battery` | `84%` |
+| `device.freeHeap` | `116 KB` |
+| `device.clock` | Current time, or empty with no RTC |
+| `reading.title` | Book you are in |
+| `reading.author` | Its author |
+| `reading.percent` | How far in, or empty if never recorded |
+| `review.word` | One word due for recall, or empty |
+
+Adding a source is a few lines in `resolveSource()`. Keep them cheap: a source
+is resolved while a screen is being built, sometimes while entering sleep, and
+anything that opens a file or waits on the network does not belong here.
+
+### Limits
+
+A manifest over 4 KB is ignored, at most 8 apps are listed, names are cut to 24
+characters and each field to 64 bytes. A broken manifest shows a message on its
+own screen rather than silently missing from the drawer.
+
 ## Checklist before you submit
 
 - [ ] `pio run` succeeds with no new warnings

@@ -1,0 +1,9 @@
+{
+  "name": "Recall",
+  "icon": "words",
+  "title": "Due for recall",
+  "rows": [
+    {"kind": "text", "text": {"src": "review.word"}, "center": true, "bold": true, "gapAfter": 2},
+    {"kind": "text", "text": "Can you recall what this means?", "center": true}
+  ]
+}

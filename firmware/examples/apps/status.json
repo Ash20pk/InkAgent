@@ -1,0 +1,13 @@
+{
+  "name": "Status",
+  "icon": "info",
+  "title": "Status",
+  "rows": [
+    {"kind": "kv", "label": "Reading",  "value": {"src": "reading.title"}},
+    {"kind": "kv", "label": "Progress", "value": {"src": "reading.percent"}},
+    {"kind": "rule", "gapAfter": 2},
+    {"kind": "kv", "label": "Battery",  "value": {"src": "device.battery"}},
+    {"kind": "kv", "label": "Free RAM", "value": {"src": "device.freeHeap"}},
+    {"kind": "text", "prefix": "Due to recall: ", "text": {"src": "review.word"}, "center": true}
+  ]
+}
