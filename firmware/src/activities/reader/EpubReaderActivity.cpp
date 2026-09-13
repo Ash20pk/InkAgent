@@ -1041,7 +1041,8 @@ bool EpubReaderActivity::launchAskBook() {
   LOG_DBG("ASKB", "Epub released (heap after: %u)", (unsigned)ESP.getFreeHeap());
 
   activityManager.replaceActivity(std::make_unique<AskBookActivity>(
-      renderer, mappedInput, std::move(passage), std::move(title), std::move(author), std::move(chapterName), percent));
+      renderer, mappedInput, std::move(passage), std::move(title), std::move(author), std::move(chapterName), percent,
+      static_cast<int>(sessionRegressions), sessionSpeedPct()));
   return true;
 }
 
@@ -1104,6 +1105,13 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
     clearDeferredReposition();
   }
   if (isForwardTurn) {
+    // Dwell on the page being left. Anything over five minutes is the device
+    // sitting open on a table, not reading, and would swamp the average.
+    const uint32_t dwell = lastPageTurnTime ? millis() - lastPageTurnTime : 0;
+    if (dwell > 0 && dwell < 300000) {
+      sessionDwellTotalMs += dwell;
+      sessionForwardTurns++;
+    }
     if (section->currentPage < section->pageCount - 1 || section->isBuilding()) {
       section->currentPage++;
       lastPageTurnTime = millis();
@@ -1123,6 +1131,7 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
   } else {
     if (section->currentPage > 0) {
       section->currentPage--;
+      if (sessionRegressions < UINT16_MAX) sessionRegressions++;
       lastPageTurnTime = millis();
       return true;
     } else if (currentSpineIndex > 0) {
@@ -1548,6 +1557,22 @@ bool EpubReaderActivity::applyDeferredReposition() {
 void EpubReaderActivity::clearDeferredReposition() {
   cachedChapterTotalPageCount = 0;
   cachedVisibleTextOffset.reset();
+}
+
+int EpubReaderActivity::sessionSpeedPct() const {
+  // Needs a few pages before a ratio means anything; a two-page session would
+  // report whatever the first turn happened to cost.
+  constexpr uint32_t kMinPages = 5;
+  if (sessionForwardTurns < kMinPages || sessionDwellTotalMs == 0) return -1;
+  const uint32_t meanMs = sessionDwellTotalMs / sessionForwardTurns;
+  if (meanMs == 0) return -1;
+  // The baseline is this reader's own typical page, not anyone else's: 25s is
+  // the starting assumption until a per-reader baseline is persisted.
+  constexpr uint32_t kBaselineMs = 25000;
+  // Slower reading means a longer dwell, so the ratio inverts: 50s a page on a
+  // 25s baseline is 50% of normal pace.
+  const uint32_t pct = (kBaselineMs * 100) / meanMs;
+  return static_cast<int>(pct > 400 ? 400 : pct);
 }
 
 bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {

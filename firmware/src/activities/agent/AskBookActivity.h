@@ -15,7 +15,8 @@
 class AskBookActivity final : public Activity {
  public:
   explicit AskBookActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string passage,
-                           std::string bookTitle, std::string author, std::string chapter, int bookPercent);
+                           std::string bookTitle, std::string author, std::string chapter, int bookPercent,
+                           int regressions = -1, int speedPct = -1);
 
   void onEnter() override;
   void onExit() override;
@@ -28,10 +29,17 @@ class AskBookActivity final : public Activity {
 
   std::string passage, bookTitle, author, chapter;
   int bookPercent;
+  // How this stretch actually went, from page turns alone. Negative means the
+  // reader did not measure it, and the request omits it rather than sending a
+  // zero that would read as a real observation.
+  int regressions = -1;
+  int speedPct = -1;
 
   State state = State::ChooseKind;
   int kindIndex = 0;
-  static constexpr int kKindCount = 4;  // explain, summary, who, translate (define goes via the dictionary)
+  // recall, explain, summary, who, translate (define goes via the dictionary)
+  static constexpr int kKindCount = 5;
+  bool isRecall() const;
   inkagent::Kind chosenKind() const;
 
   bool wifiActivated = false;

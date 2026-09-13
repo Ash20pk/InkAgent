@@ -123,6 +123,17 @@ class EpubReaderActivity final : public ReaderActivity {
   bool applyDeferredReposition();
   void clearDeferredReposition();
   void rememberCurrentContentOffset();
+  // Reading behaviour for this session, computed from page turns alone — no
+  // sensors, and nothing leaves the device but these two derived numbers.
+  // Going back over a stretch is the readable signal that attention lapsed:
+  // readers reread to recover the thread rather than to admire the prose.
+  uint16_t sessionRegressions = 0;
+  uint32_t sessionForwardTurns = 0;
+  uint32_t sessionDwellTotalMs = 0;
+  // Pace on this stretch as a percentage of the reader's own running average,
+  // or -1 before there is enough of a baseline to divide by.
+  int sessionSpeedPct() const;
+
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   void jumpToPercent(int percent);
   void onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction action);
