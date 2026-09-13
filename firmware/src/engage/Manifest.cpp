@@ -29,6 +29,7 @@ void resolveField(JsonVariantConst field, const GfxRenderer& renderer, char* out
 
 RowKind kindFromName(const char* name) {
   if (name == nullptr) return RowKind::Text;
+  if (strcmp(name, "para") == 0) return RowKind::Para;
   if (strcmp(name, "kv") == 0) return RowKind::Kv;
   if (strcmp(name, "rule") == 0) return RowKind::Rule;
   if (strcmp(name, "logo") == 0) return RowKind::Logo;
@@ -40,6 +41,7 @@ RowKind kindFromName(const char* name) {
 bool parseScreen(const char* json, const size_t len, const GfxRenderer& renderer, Screen& out) {
   out.rowCount = 0;
   out.title[0] = '\0';
+  out.paraUsed = 0;
 
   JsonDocument doc;
   const DeserializationError err = deserializeJson(doc, json, len);
@@ -72,6 +74,25 @@ bool parseScreen(const char* json, const size_t len, const GfxRenderer& renderer
         resolveField(entry["label"], renderer, row.a, sizeof(row.a));
         resolveField(entry["value"], renderer, row.b, sizeof(row.b));
         break;
+      case RowKind::Para: {
+        // Resolved straight into the pool so a sentence is never copied through
+        // a 64-byte field on its way there.
+        const size_t avail = kMaxParaBytes > out.paraUsed ? kMaxParaBytes - out.paraUsed : 0;
+        if (avail <= 1) {
+          LOG_ERR("ENGAGE", "paragraph pool full, row dropped");
+          out.rowCount--;
+          break;
+        }
+        char* slot = out.paraPool + out.paraUsed;
+        resolveField(entry["text"], renderer, slot, avail);
+        const size_t len = strlen(slot);
+        row.paraOffset = out.paraUsed;
+        row.paraLen = static_cast<uint16_t>(len);
+        out.paraUsed = static_cast<uint16_t>(out.paraUsed + len + 1);
+        const int maxLines = entry["maxLines"].is<int>() ? entry["maxLines"].as<int>() : 4;
+        row.maxLines = static_cast<uint8_t>(maxLines < 1 ? 1 : (maxLines > 8 ? 8 : maxLines));
+        break;
+      }
       case RowKind::Rule:
       case RowKind::Logo:
         break;

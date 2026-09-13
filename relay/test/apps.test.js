@@ -32,6 +32,26 @@ test('a source the reader does not provide is named, not silently dropped', () =
   assert.match(r.errors.join(' '), /weather\.today.*does not provide/);
 });
 
+test('a paragraph can hold a sentence, where a text row could not', () => {
+  const sentence = 'This reader keeps the words you look up and asks you about them later, which is what makes them stick.';
+  const r = validateManifest(JSON.stringify({
+    name: 'Note', rows: [{ kind: 'para', text: sentence, maxLines: 3 }],
+  }));
+  assert.equal(r.ok, true, r.errors.join('; '));
+
+  // The same sentence in a text row is over the per-field limit.
+  const asText = validateManifest(JSON.stringify({ name: 'Note', rows: [{ kind: 'text', text: sentence }] }));
+  assert.equal(asText.ok, false);
+  assert.match(asText.errors.join(' '), /longer than 64 bytes/);
+});
+
+test('paragraphs are pooled, so the cap is across the screen not per row', () => {
+  const rows = Array.from({ length: 5 }, () => ({ kind: 'para', text: 'x'.repeat(120) }));
+  const r = validateManifest(JSON.stringify({ name: 'Wordy', rows }));
+  assert.equal(r.ok, false);
+  assert.match(r.errors.join(' '), /the device pools them and holds 480/);
+});
+
 test('an app with no name is refused', () => {
   const r = validateManifest(JSON.stringify({ rows: [] }));
   assert.equal(r.ok, false);

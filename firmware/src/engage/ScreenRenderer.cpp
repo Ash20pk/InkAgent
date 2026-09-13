@@ -53,6 +53,25 @@ int drawScreenBody(GfxRenderer& renderer, const Screen& screen, const int startY
         break;
       }
 
+      case RowKind::Para: {
+        // The one row kind that may run to several lines. Everything else is a
+        // single line by construction, which is what keeps layout predictable.
+        if (row.paraLen == 0) break;  // collapsed, like an empty text row
+        const char* text = screen.paraPool + row.paraOffset;
+        const int lineHeight = renderer.getLineHeight(UI_10_FONT_ID);
+        const auto lines = renderer.wrappedText(UI_10_FONT_ID, text, pageWidth - labelX * 2, row.maxLines);
+        for (const auto& line : lines) {
+          if (row.centered) {
+            UITheme::drawCenteredText(renderer, Rect{0, y, pageWidth, lineHeight}, UI_10_FONT_ID, y, line.c_str());
+          } else {
+            renderer.drawText(UI_10_FONT_ID, labelX, y, line.c_str());
+          }
+          y += lineHeight;
+        }
+        y += gap;
+        break;
+      }
+
       case RowKind::Rule:
         renderer.fillRect(labelX, y, pageWidth - labelX * 2, 1);
         y += 1 + gap;
@@ -93,6 +112,13 @@ int measureScreenBody(const GfxRenderer& renderer, const Screen& screen) {
       case RowKind::Rule:
         height += 1 + gap;
         break;
+      case RowKind::Para: {
+        if (row.paraLen == 0) break;
+        const int width = renderer.getScreenWidth() - metrics.contentSidePadding * 2;
+        const auto lines = renderer.wrappedText(UI_10_FONT_ID, screen.paraPool + row.paraOffset, width, row.maxLines);
+        height += static_cast<int>(lines.size()) * renderer.getLineHeight(UI_10_FONT_ID) + gap;
+        break;
+      }
       case RowKind::Kv:
         // Label line plus a single value line; a wrapped value only grows this.
         height += renderer.getLineHeight(UI_10_FONT_ID) + renderer.getLineHeight(UI_12_FONT_ID) + gap;

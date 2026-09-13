@@ -3,6 +3,7 @@
   "icon": "info",
   "title": "Status",
   "rows": [
+    {"kind": "para", "text": "Everything this screen shows is read from the device itself. A manifest cannot reach the network.", "maxLines": 3, "gapAfter": 2},
     {"kind": "kv", "label": "Reading",  "value": {"src": "reading.title"}},
     {"kind": "kv", "label": "Progress", "value": {"src": "reading.percent"}},
     {"kind": "rule", "gapAfter": 2},

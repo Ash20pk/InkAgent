@@ -25,18 +25,23 @@ export const ICONS = [
   'settings', 'info', 'clock', 'sun', 'wifi', 'folder', 'file', 'apps',
 ];
 
-export const ROW_KINDS = ['text', 'kv', 'rule', 'logo'];
+export const ROW_KINDS = ['text', 'kv', 'rule', 'logo', 'para'];
 
 // These mirror the firmware's hard caps. A manifest that exceeds them is not
 // truncated silently: the author is told, because a screen that quietly loses
 // its last three rows is worse than one that refuses to save.
-export const LIMITS = { bytes: 4096, rows: 16, field: 64, name: 24 };
+export const LIMITS = {
+  bytes: 4096, rows: 16, field: 64, name: 24,
+  // Paragraphs share one pool on the device rather than each row carrying
+  // paragraph-sized storage, so the cap is on the total across a screen.
+  paraPool: 480,
+};
 
-function checkField(value, where, errors) {
+function checkField(value, where, errors, limit = LIMITS.field) {
   if (value === undefined || value === null) return;
   if (typeof value === 'string') {
-    if (Buffer.byteLength(value, 'utf8') > LIMITS.field) {
-      errors.push(`${where} is longer than ${LIMITS.field} bytes and would be cut on the device`);
+    if (Buffer.byteLength(value, 'utf8') > limit) {
+      errors.push(`${where} is longer than ${limit} bytes and would be cut on the device`);
     }
     return;
   }
@@ -87,7 +92,12 @@ export function validateManifest(text) {
       if (!row || typeof row !== 'object') { errors.push(`${at} is not an object`); return; }
       const kind = row.kind ?? 'text';
       if (!ROW_KINDS.includes(kind)) { errors.push(`${at} has kind "${kind}"; known kinds are ${ROW_KINDS.join(', ')}`); return; }
-      if (kind === 'text') {
+      if (kind === 'para') {
+        checkField(row.text, `${at} text`, errors, LIMITS.paraPool);
+        if (row.maxLines !== undefined && (!Number.isInteger(row.maxLines) || row.maxLines < 1 || row.maxLines > 8)) {
+          errors.push(`${at} maxLines must be a whole number from 1 to 8`);
+        }
+      } else if (kind === 'text') {
         checkField(row.text, `${at} text`, errors);
         checkField(row.prefix, `${at} prefix`, errors);
       } else if (kind === 'kv') {
@@ -103,6 +113,15 @@ export function validateManifest(text) {
         if (key in row) errors.push(`${at} uses "${key}"; manifests describe a screen, they do not branch or loop`);
       }
     });
+  }
+
+  if (Array.isArray(doc.rows)) {
+    const paraBytes = doc.rows
+      .filter(r => r && r.kind === 'para' && typeof r.text === 'string')
+      .reduce((n, r) => n + Buffer.byteLength(r.text, 'utf8') + 1, 0);
+    if (paraBytes > LIMITS.paraPool) {
+      errors.push(`paragraphs total ${paraBytes} bytes; the device pools them and holds ${LIMITS.paraPool}`);
+    }
   }
 
   return {

@@ -206,6 +206,7 @@ Row kinds:
 | `kind` | Draws |
 | --- | --- |
 | `text` | One line. `text` is a literal or a binding; `bold`, `center` and `prefix` are optional. |
+| `para` | Wrapped prose — the only kind that may run to several lines. `maxLines` (1–8, default 4) caps it; `center` optional. |
 | `kv` | A small `label` with a larger `value` beneath it. The value wraps to two lines. |
 | `rule` | A horizontal divider. |
 | `logo` | The product mark, centred. |
@@ -213,9 +214,16 @@ Row kinds:
 Every row takes `gapAfter`: the space below it, in multiples of the theme's
 vertical spacing, 0 to 4.
 
-A `text` row whose value resolves to nothing is **collapsed entirely** — it
-takes no space and its `prefix` disappears with it. That is how an optional row
-works, and it is why the format has no conditionals.
+A `text` or `para` row whose value resolves to nothing is **collapsed
+entirely** — it takes no space and a `text` row's `prefix` disappears with it.
+That is how an optional row works, and it is why the format has no conditionals.
+
+Use `para` for a sentence and `text` for a label or a value. A `text` row is a
+single line and will run off the edge if you give it prose; a `para` row wraps.
+They are stored differently for a reason: row fields are 64 bytes each, while
+paragraphs share one 480-byte pool across the whole screen. Sixteen rows each
+carrying paragraph-sized storage would cost sixteen times what a screen with one
+or two paragraphs actually needs, and would not fit the device's budget.
 
 ### What a manifest cannot say
 
@@ -257,7 +265,8 @@ anything that opens a file or waits on the network does not belong here.
 ### Limits
 
 A manifest over 4 KB is ignored, at most 8 apps are listed, names are cut to 24
-characters and each field to 64 bytes. A broken manifest shows a message on its
+characters and each row field to 64 bytes. Paragraphs share a 480-byte pool
+across the screen, so the limit is on their total rather than on each one. A broken manifest shows a message on its
 own screen rather than silently missing from the drawer.
 
 ## Checklist before you submit
