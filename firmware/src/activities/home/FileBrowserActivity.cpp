@@ -265,7 +265,7 @@ void FileBrowserActivity::activateSelected(const bool forceDelete) {
   bool isDirectory = (entry.back() == '/');
 
   // Firmware picker: select file -> return path; navigate into directories normally.
-  if (mode == Mode::PickFirmware && !isDirectory) {
+  if ((mode == Mode::PickFirmware || mode == Mode::PickToSend) && !isDirectory) {
     std::string cleanBasePath = basepath;
     if (cleanBasePath.back() != '/') cleanBasePath += "/";
     ActivityResult res{FilePathResult{cleanBasePath + entry}};
@@ -387,8 +387,8 @@ bool FileBrowserActivity::handleButtons() {
         }
 
         requestUpdate();
-      } else if (mode == Mode::PickFirmware) {
-        // Firmware picker at root: cancel back to caller instead of going home.
+      } else if (mode == Mode::PickFirmware || mode == Mode::PickToSend) {
+        // A picker at root cancels back to its caller instead of going home.
         ActivityResult res;
         res.isCancelled = true;
         setResult(std::move(res));
@@ -519,11 +519,14 @@ void FileBrowserActivity::drawChrome() {
 }
 
 void FileBrowserActivity::drawFooter() {
-  const char* backLabel = (basepath == "/") ? (mode == Mode::PickFirmware ? tr(STR_BACK) : tr(STR_HOME)) : tr(STR_BACK);
+  const char* backLabel = (basepath == "/")
+                              ? ((mode == Mode::PickFirmware || mode == Mode::PickToSend) ? tr(STR_BACK) : tr(STR_HOME))
+                              : tr(STR_BACK);
   // In PickFirmware mode, Confirm on a .bin returns the path to the caller (not "open"); show
   // STR_SELECT instead. Directories in the same picker still descend, so keep STR_OPEN there.
-  const bool selectingFirmwareFile = mode == Mode::PickFirmware && !files.empty() && nav.selected >= 0 &&
-                                     nav.selected < listCount() && files[nav.selected].back() != '/';
+  const bool selectingFirmwareFile = (mode == Mode::PickFirmware || mode == Mode::PickToSend) && !files.empty() &&
+                                     nav.selected >= 0 && nav.selected < listCount() &&
+                                     files[nav.selected].back() != '/';
   const char* confirmLabel = files.empty() ? "" : (selectingFirmwareFile ? tr(STR_SELECT) : tr(STR_OPEN));
   const auto labels = mappedInput.mapLabels(backLabel, confirmLabel, files.empty() ? "" : tr(STR_DIR_UP),
                                             files.empty() ? "" : tr(STR_DIR_DOWN));

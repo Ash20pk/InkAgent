@@ -28,6 +28,8 @@ class AppDrawerActivity : public Activity {
     WORD_LIST,
     HIGHLIGHTS,
     READ_LATER,
+    FILE_TRANSFER,
+    PEER_SEND,
     // An app that is a manifest file in /Apps rather than compiled in.
     CATALOG_APP,
     // Registered by an app under src/apps/ rather than built in; the AppInfo

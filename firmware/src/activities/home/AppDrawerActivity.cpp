@@ -9,7 +9,10 @@
 #include "OpdsServerStore.h"
 #include "activities/browser/OpdsBookBrowserActivity.h"
 #include "activities/highlights/HighlightsActivity.h"
+#include "activities/home/FileBrowserActivity.h"
 #include "activities/home/RecentBooksActivity.h"
+#include "activities/network/InkAgentWebServerActivity.h"
+#include "activities/network/PeerSendActivity.h"
 #include "activities/readlater/ReadLaterActivity.h"
 #include "activities/settings/OpdsServerListActivity.h"
 #include "activities/words/WordListActivity.h"
@@ -75,6 +78,10 @@ const freeink::Icon& iconFor(const int index, const StrId label) {
       return icon_bookmark_32;
     case StrId::STR_READ_LATER:
       return icon_inbox_32;
+    case StrId::STR_FILE_TRANSFER:
+      return icon_upload_32;
+    case StrId::STR_PEER_SEND:
+      return icon_radio_tower_32;
     default:
       return icon_apps_32;
   }
@@ -92,6 +99,10 @@ void AppDrawerActivity::onEnter() {
       {Target::WORD_LIST, StrId::STR_WORD_LIST},
       {Target::HIGHLIGHTS, StrId::STR_HIGHLIGHTS},
       {Target::READ_LATER, StrId::STR_READ_LATER},
+      // Not a reading screen, but it is how the reading screens get fed: the
+      // way books and articles arrive belongs next to where they land.
+      {Target::FILE_TRANSFER, StrId::STR_FILE_TRANSFER},
+      {Target::PEER_SEND, StrId::STR_PEER_SEND},
   };
   // Only when there is somewhere to browse: a tile that opens an empty server
   // picker is a dead tile.
@@ -269,6 +280,24 @@ void AppDrawerActivity::activate(const Target target) {
       break;
     case Target::READ_LATER:
       push(makeUniqueNoThrow<ReadLaterActivity>(renderer, mappedInput), "Read Later");
+      break;
+    case Target::FILE_TRANSFER:
+      push(makeUniqueNoThrow<InkAgentWebServerActivity>(renderer, mappedInput), "File Transfer");
+      break;
+    case Target::PEER_SEND:
+      // Pick the file here, then hand the path to the sender: the browser
+      // already knows how to list what the reader can open.
+      startActivityForResult(makeUniqueNoThrow<FileBrowserActivity>(renderer, mappedInput, std::string{},
+                                                                    FileBrowserActivity::Mode::PickToSend),
+                             [this](const ActivityResult& result) {
+                               if (result.isCancelled) {
+                                 requestUpdate();
+                                 return;
+                               }
+                               const auto& picked = std::get<FilePathResult>(result.data);
+                               push(makeUniqueNoThrow<PeerSendActivity>(renderer, mappedInput, picked.path),
+                                    "Send to reader");
+                             });
       break;
     case Target::CATALOG_APP: {
       const int idx = entries[selectedIndex].catalogIndex;
