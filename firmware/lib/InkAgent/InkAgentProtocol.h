@@ -7,22 +7,22 @@
 
 namespace inkagent {
 
-constexpr uint16_t kDefaultBudget = 1536;   // bytes of answer text the device can hold and show
-constexpr size_t kMaxPassageBytes = 1800;   // ≤ relay limit of 2000, leaves room for escaping
-constexpr size_t kAskRequestCap = 2600;     // passage + escaping + metadata
+constexpr uint16_t kDefaultBudget = 1536;  // bytes of answer text the device can hold and show
+constexpr size_t kMaxPassageBytes = 1800;  // ≤ relay limit of 2000, leaves room for escaping
+constexpr size_t kAskRequestCap = 2600;    // passage + escaping + metadata
 
 enum class Kind : uint8_t { Explain = 0, Summary, Who, Translate, Define, Count };
-const char* kindWire(Kind k);              // "explain" ...
-const char* kindLabel(Kind k);             // "Explain this" ... (UI fallback; real UI uses tr())
+const char* kindWire(Kind k);   // "explain" ...
+const char* kindLabel(Kind k);  // "Explain this" ... (UI fallback; real UI uses tr())
 
 struct AskRequest {
   Kind kind = Kind::Explain;
   const char* book = nullptr;
   const char* author = nullptr;
   const char* chapter = nullptr;
-  int pct = -1;                 // -1 = unknown
-  const char* text = nullptr;   // passage, UTF-8, ≤ kMaxPassageBytes
-  const char* arg = nullptr;    // language / headword
+  int pct = -1;                // -1 = unknown
+  const char* text = nullptr;  // passage, UTF-8, ≤ kMaxPassageBytes
+  const char* arg = nullptr;   // language / headword
 };
 
 // Appends `src` JSON-escaped to out[pos..cap). Returns false if it did not fit.
@@ -42,11 +42,32 @@ bool jsonGetString(const char* json, size_t len, const char* key, char* out, siz
 bool jsonGetInt(const char* json, size_t len, const char* key, long& value);
 bool jsonGetBool(const char* json, size_t len, const char* key, bool& value);
 
+// An Engage turn: the relay's agent composes a screen, this device renders it.
+// Behavioural fields are negative when the reader did not measure them, and are
+// simply omitted from the request rather than sent as zero — zero regressions
+// is a real reading, "not measured" is not.
+struct EngageRequest {
+  const char* app = "recall";
+  const char* book = nullptr;
+  const char* author = nullptr;
+  const char* chapter = nullptr;
+  int pct = -1;
+  const char* text = nullptr;  // passage, UTF-8, <= kMaxPassageBytes
+  int regressions = -1;        // backward page turns in this stretch
+  int speedRatioPct = -1;      // pace as a percentage of this reader's own baseline
+};
+size_t buildEngageRequest(const EngageRequest& req, char* out, size_t cap);
+
+// Locates a nested object value by top-level key and returns the span covering
+// it, braces included, so the caller can cache the screen verbatim without
+// parsing it. The device never inspects the screen here: the renderer does.
+bool jsonGetRawObject(const char* json, size_t len, const char* key, const char** start, size_t* outLen);
+
 struct AskResponse {
-  bool ok = false;              // HTTP 2xx and text present
-  bool truncated = false;       // relay cut the answer to fit (trunc:true) or we cut it locally
-  bool revoked = false;         // 401 revoked → wipe token, re-pair
-  bool noProvider = false;      // 402 → user must add a key on the dashboard
+  bool ok = false;          // HTTP 2xx and text present
+  bool truncated = false;   // relay cut the answer to fit (trunc:true) or we cut it locally
+  bool revoked = false;     // 401 revoked → wipe token, re-pair
+  bool noProvider = false;  // 402 → user must add a key on the dashboard
   char sid[24] = {0};
   // `text` is filled by the caller-provided buffer; see parseAskResponse
 };

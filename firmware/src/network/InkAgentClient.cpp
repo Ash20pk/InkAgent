@@ -158,3 +158,63 @@ inkagent::AskResponse InkAgentClient::ask(const inkagent::AskRequest& req, char*
   body.reset();
   return inkagent::parseAskResponse(code, resp.c_str(), resp.size(), textOut, textCap);
 }
+
+InkAgentClient::EngageResult InkAgentClient::engage(const inkagent::EngageRequest& req, const char* cachePath,
+                                                    char* textOut, const size_t textCap) {
+  EngageResult out;
+  if (textOut && textCap) textOut[0] = '\0';
+
+  std::unique_ptr<char[]> body(new (std::nothrow) char[inkagent::kAskRequestCap]);
+  if (!body) {
+    LOG_ERR("INKA", "OOM: engage request buffer");
+    return out;
+  }
+  const size_t n = inkagent::buildEngageRequest(req, body.get(), inkagent::kAskRequestCap);
+  std::string resp;
+  const int code = n ? post("/v1/engage", body.get(), n, true, resp) : -1;
+  body.reset();
+
+  // The relay sends screen text on every outcome it can, so a failure still has
+  // something to put on screen rather than a bare code.
+  if (textOut && textCap) {
+    inkagent::jsonGetString(resp.c_str(), resp.size(), "text", textOut, textCap);
+  }
+
+  if (code == 401) {
+    out.revoked = true;
+    return out;
+  }
+  if (code == 402) {
+    out.noProvider = true;
+    return out;
+  }
+  if (code < 200 || code >= 300) return out;
+
+  // Cache the screen verbatim. The device does not parse it here: the renderer
+  // is the only thing that understands a manifest, and keeping it opaque on
+  // this path means a relay that grows a row kind needs no change up here.
+  const char* screen = nullptr;
+  size_t screenLen = 0;
+  if (!inkagent::jsonGetRawObject(resp.c_str(), resp.size(), "screen", &screen, &screenLen) || screenLen == 0) {
+    LOG_ERR("INKA", "engage: no screen in response");
+    return out;
+  }
+
+  HalFile f;
+  if (!Storage.openFileForWrite("INKA", cachePath, f)) {
+    LOG_ERR("INKA", "engage: cannot write %s", cachePath);
+    return out;
+  }
+  const bool wrote = f.write(reinterpret_cast<const uint8_t*>(screen), screenLen) == static_cast<int>(screenLen);
+  f.close();
+  if (!wrote) {
+    LOG_ERR("INKA", "engage: short write to %s", cachePath);
+    // A half-written screen is worse than none: the renderer would show a
+    // truncated question as though the agent meant it.
+    Storage.remove(cachePath);
+    return out;
+  }
+
+  out.ok = true;
+  return out;
+}

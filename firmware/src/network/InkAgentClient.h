@@ -25,6 +25,25 @@ class InkAgentClient {
   // always contains something renderable, success or not.
   static inkagent::AskResponse ask(const inkagent::AskRequest& req, char* textOut, size_t textCap);
 
+  // Result of an Engage turn. The screen itself is never inspected here: on
+  // success it has already been written to the cache file, and the renderer is
+  // the only thing that reads it.
+  struct EngageResult {
+    bool ok = false;
+    bool revoked = false;     // 401 -> wipe token, re-pair
+    bool noProvider = false;  // 402 -> owner must connect a model
+  };
+
+  // Fetches a screen and caches it at cachePath, replacing what is there only
+  // on success: a failed turn must never blank an ambient surface that is
+  // already showing something useful.
+  // textOut receives the question in plain form for immediate display; the
+  // screen itself is cached opaquely for the renderer.
+  static EngageResult engage(const inkagent::EngageRequest& req, const char* cachePath, char* textOut, size_t textCap);
+
+  // Where the sleep canvas looks for the last screen the agent composed.
+  static constexpr const char* ENGAGE_CACHE = "/.inkagent/engage.json";
+
   static int lastHttpCode;
   static void hardwareId(char out[13]);
 };

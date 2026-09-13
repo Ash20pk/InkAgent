@@ -55,7 +55,10 @@ size_t findTopLevelValue(const char* s, size_t len, const char* key) {
     if (s[i] != '"') return len;
     // read key
     size_t kstart = ++i;
-    while (i < len && s[i] != '"') { if (s[i] == '\\') i++; i++; }
+    while (i < len && s[i] != '"') {
+      if (s[i] == '\\') i++;
+      i++;
+    }
     if (i >= len) return len;
     const bool match = (i - kstart == klen) && memcmp(s + kstart, key, klen) == 0;
     i = skipWs(s, len, i + 1);
@@ -65,17 +68,33 @@ size_t findTopLevelValue(const char* s, size_t len, const char* key) {
     // skip value
     if (s[i] == '"') {
       i++;
-      while (i < len && s[i] != '"') { if (s[i] == '\\') i++; i++; }
+      while (i < len && s[i] != '"') {
+        if (s[i] == '\\') i++;
+        i++;
+      }
       i++;
     } else if (s[i] == '{' || s[i] == '[') {
       depth = 0;
       bool inStr = false;
       for (; i < len; i++) {
         const char c = s[i];
-        if (inStr) { if (c == '\\') i++; else if (c == '"') inStr = false; continue; }
-        if (c == '"') inStr = true;
-        else if (c == '{' || c == '[') depth++;
-        else if (c == '}' || c == ']') { if (--depth == 0) { i++; break; } }
+        if (inStr) {
+          if (c == '\\')
+            i++;
+          else if (c == '"')
+            inStr = false;
+          continue;
+        }
+        if (c == '"')
+          inStr = true;
+        else if (c == '{' || c == '[')
+          depth++;
+        else if (c == '}' || c == ']') {
+          if (--depth == 0) {
+            i++;
+            break;
+          }
+        }
       }
     } else {
       while (i < len && s[i] != ',' && s[i] != '}') i++;
@@ -87,51 +106,99 @@ size_t findTopLevelValue(const char* s, size_t len, const char* key) {
 }
 
 void putUtf8(char* out, size_t cap, size_t& pos, uint32_t cp, bool& trunc) {
-  char tmp[4]; size_t n;
-  if (cp < 0x80) { tmp[0] = (char)cp; n = 1; }
-  else if (cp < 0x800) { tmp[0] = (char)(0xC0 | (cp >> 6)); tmp[1] = (char)(0x80 | (cp & 0x3F)); n = 2; }
-  else if (cp < 0x10000) { tmp[0] = (char)(0xE0 | (cp >> 12)); tmp[1] = (char)(0x80 | ((cp >> 6) & 0x3F)); tmp[2] = (char)(0x80 | (cp & 0x3F)); n = 3; }
-  else { tmp[0] = (char)(0xF0 | (cp >> 18)); tmp[1] = (char)(0x80 | ((cp >> 12) & 0x3F)); tmp[2] = (char)(0x80 | ((cp >> 6) & 0x3F)); tmp[3] = (char)(0x80 | (cp & 0x3F)); n = 4; }
-  if (pos + n >= cap) { trunc = true; return; }
-  memcpy(out + pos, tmp, n); pos += n;
+  char tmp[4];
+  size_t n;
+  if (cp < 0x80) {
+    tmp[0] = (char)cp;
+    n = 1;
+  } else if (cp < 0x800) {
+    tmp[0] = (char)(0xC0 | (cp >> 6));
+    tmp[1] = (char)(0x80 | (cp & 0x3F));
+    n = 2;
+  } else if (cp < 0x10000) {
+    tmp[0] = (char)(0xE0 | (cp >> 12));
+    tmp[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
+    tmp[2] = (char)(0x80 | (cp & 0x3F));
+    n = 3;
+  } else {
+    tmp[0] = (char)(0xF0 | (cp >> 18));
+    tmp[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+    tmp[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
+    tmp[3] = (char)(0x80 | (cp & 0x3F));
+    n = 4;
+  }
+  if (pos + n >= cap) {
+    trunc = true;
+    return;
+  }
+  memcpy(out + pos, tmp, n);
+  pos += n;
 }
 
 uint32_t hex4(const char* p) {
   uint32_t v = 0;
   for (int k = 0; k < 4; k++) {
-    const char c = p[k]; v <<= 4;
-    if (c >= '0' && c <= '9') v |= c - '0';
-    else if (c >= 'a' && c <= 'f') v |= c - 'a' + 10;
-    else if (c >= 'A' && c <= 'F') v |= c - 'A' + 10;
+    const char c = p[k];
+    v <<= 4;
+    if (c >= '0' && c <= '9')
+      v |= c - '0';
+    else if (c >= 'a' && c <= 'f')
+      v |= c - 'a' + 10;
+    else if (c >= 'A' && c <= 'F')
+      v |= c - 'A' + 10;
   }
   return v;
 }
 }  // namespace
 
-const char* kindWire(Kind k) { return static_cast<uint8_t>(k) < static_cast<uint8_t>(Kind::Count) ? kKindWire[static_cast<uint8_t>(k)] : "explain"; }
-const char* kindLabel(Kind k) { return static_cast<uint8_t>(k) < static_cast<uint8_t>(Kind::Count) ? kKindLabel[static_cast<uint8_t>(k)] : "?"; }
+const char* kindWire(Kind k) {
+  return static_cast<uint8_t>(k) < static_cast<uint8_t>(Kind::Count) ? kKindWire[static_cast<uint8_t>(k)] : "explain";
+}
+const char* kindLabel(Kind k) {
+  return static_cast<uint8_t>(k) < static_cast<uint8_t>(Kind::Count) ? kKindLabel[static_cast<uint8_t>(k)] : "?";
+}
 
 bool jsonEscapeAppend(char* out, size_t cap, size_t& pos, const char* src) {
   for (const unsigned char* p = reinterpret_cast<const unsigned char*>(src); *p; p++) {
-    const char* rep = nullptr; char buf[8];
+    const char* rep = nullptr;
+    char buf[8];
     switch (*p) {
-      case '"': rep = "\\\""; break;
-      case '\\': rep = "\\\\"; break;
-      case '\n': rep = "\\n"; break;
-      case '\r': rep = "\\r"; break;
-      case '\t': rep = "\\t"; break;
+      case '"':
+        rep = "\\\"";
+        break;
+      case '\\':
+        rep = "\\\\";
+        break;
+      case '\n':
+        rep = "\\n";
+        break;
+      case '\r':
+        rep = "\\r";
+        break;
+      case '\t':
+        rep = "\\t";
+        break;
       default:
-        if (*p < 0x20) { snprintf(buf, sizeof(buf), "\\u%04x", *p); rep = buf; }
+        if (*p < 0x20) {
+          snprintf(buf, sizeof(buf), "\\u%04x", *p);
+          rep = buf;
+        }
     }
-    if (rep) { if (!append(out, cap, pos, rep)) return false; }
-    else { if (pos + 1 >= cap) return false; out[pos++] = (char)*p; out[pos] = '\0'; }
+    if (rep) {
+      if (!append(out, cap, pos, rep)) return false;
+    } else {
+      if (pos + 1 >= cap) return false;
+      out[pos++] = (char)*p;
+      out[pos] = '\0';
+    }
   }
   return true;
 }
 
 size_t buildAskRequest(const AskRequest& req, char* out, size_t cap) {
   if (!req.text || cap < 16) return 0;
-  size_t pos = 0; bool first = true;
+  size_t pos = 0;
+  bool first = true;
   if (!append(out, cap, pos, "{")) return 0;
   if (!appendField(out, cap, pos, "kind", kindWire(req.kind), first)) return 0;
   if (!appendField(out, cap, pos, "book", req.book, first)) return 0;
@@ -144,8 +211,77 @@ size_t buildAskRequest(const AskRequest& req, char* out, size_t cap) {
   return pos;
 }
 
+size_t buildEngageRequest(const EngageRequest& req, char* out, size_t cap) {
+  if (!req.text || cap < 16) return 0;
+  size_t pos = 0;
+  bool first = true;
+  if (!append(out, cap, pos, "{")) return 0;
+  if (!appendField(out, cap, pos, "app", req.app, first)) return 0;
+  if (!appendField(out, cap, pos, "book", req.book, first)) return 0;
+  if (!appendField(out, cap, pos, "author", req.author, first)) return 0;
+  if (!appendField(out, cap, pos, "chapter", req.chapter, first)) return 0;
+  if (req.pct >= 0 && !appendIntField(out, cap, pos, "pct", req.pct, first)) return 0;
+  if (!appendField(out, cap, pos, "text", req.text, first)) return 0;
+  // features is its own object so the relay can gain signals without the device
+  // changing shape; omitted entirely when nothing was measured.
+  if (req.regressions >= 0 || req.speedRatioPct >= 0) {
+    if (!append(out, cap, pos, ",\"features\":{")) return 0;
+    bool ffirst = true;
+    if (req.regressions >= 0 && !appendIntField(out, cap, pos, "regressions", req.regressions, ffirst)) return 0;
+    if (req.speedRatioPct >= 0) {
+      // The relay wants a ratio; the device carries no floats through the wire
+      // builder, so it sends percent and the relay divides.
+      if (!appendIntField(out, cap, pos, "speedPct", req.speedRatioPct, ffirst)) return 0;
+    }
+    if (!append(out, cap, pos, "}")) return 0;
+  }
+  if (!append(out, cap, pos, "}")) return 0;
+  return pos;
+}
+
+bool jsonGetRawObject(const char* s, const size_t len, const char* key, const char** start, size_t* outLen) {
+  if (start) *start = nullptr;
+  if (outLen) *outLen = 0;
+  size_t i = findTopLevelValue(s, len, key);
+  if (i >= len || s[i] != '{') return false;
+  // Brace matching that ignores braces inside strings, and does not trip on an
+  // escaped quote.
+  int depth = 0;
+  bool inStr = false, esc = false;
+  for (size_t j = i; j < len; j++) {
+    const char c = s[j];
+    if (inStr) {
+      if (esc) {
+        esc = false;
+        continue;
+      }
+      if (c == '\\') {
+        esc = true;
+        continue;
+      }
+      if (c == '"') inStr = false;
+      continue;
+    }
+    if (c == '"') {
+      inStr = true;
+      continue;
+    }
+    if (c == '{')
+      depth++;
+    else if (c == '}') {
+      if (--depth == 0) {
+        if (start) *start = s + i;
+        if (outLen) *outLen = j - i + 1;
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 size_t buildPairStart(const char* hwId, const char* fwVersion, uint16_t budget, char* out, size_t cap) {
-  size_t pos = 0; bool first = true;
+  size_t pos = 0;
+  bool first = true;
   if (!append(out, cap, pos, "{")) return 0;
   if (!appendField(out, cap, pos, "hw", hwId, first)) return 0;
   if (!appendField(out, cap, pos, "fw", fwVersion, first)) return 0;
@@ -155,7 +291,8 @@ size_t buildPairStart(const char* hwId, const char* fwVersion, uint16_t budget, 
 }
 
 size_t buildPairPoll(const char* deviceCode, char* out, size_t cap) {
-  size_t pos = 0; bool first = true;
+  size_t pos = 0;
+  bool first = true;
   if (!append(out, cap, pos, "{")) return 0;
   if (!appendField(out, cap, pos, "device_code", deviceCode, first)) return 0;
   if (!append(out, cap, pos, "}")) return 0;
@@ -169,27 +306,53 @@ bool jsonGetString(const char* s, size_t len, const char* key, char* out, size_t
   size_t i = findTopLevelValue(s, len, key);
   if (i >= len || s[i] != '"') return false;
   i++;
-  size_t pos = 0; bool trunc = false;
+  size_t pos = 0;
+  bool trunc = false;
   while (i < len && s[i] != '"') {
-    if (trunc) { i++; continue; }  // keep scanning to validate, stop copying
+    if (trunc) {
+      i++;
+      continue;
+    }  // keep scanning to validate, stop copying
     if (s[i] == '\\' && i + 1 < len) {
       i++;
       char c = s[i];
       uint32_t cp = 0;
       switch (c) {
-        case 'n': cp = '\n'; break; case 't': cp = '\t'; break; case 'r': cp = '\r'; break;
-        case 'b': cp = '\b'; break; case 'f': cp = '\f'; break;
-        case '"': case '\\': case '/': cp = (unsigned char)c; break;
+        case 'n':
+          cp = '\n';
+          break;
+        case 't':
+          cp = '\t';
+          break;
+        case 'r':
+          cp = '\r';
+          break;
+        case 'b':
+          cp = '\b';
+          break;
+        case 'f':
+          cp = '\f';
+          break;
+        case '"':
+        case '\\':
+        case '/':
+          cp = (unsigned char)c;
+          break;
         case 'u':
           if (i + 4 < len) {
-            cp = hex4(s + i + 1); i += 4;
+            cp = hex4(s + i + 1);
+            i += 4;
             if (cp >= 0xD800 && cp <= 0xDBFF && i + 6 < len && s[i + 1] == '\\' && s[i + 2] == 'u') {
               const uint32_t lo = hex4(s + i + 3);
-              if (lo >= 0xDC00 && lo <= 0xDFFF) { cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00); i += 6; }
+              if (lo >= 0xDC00 && lo <= 0xDFFF) {
+                cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+                i += 6;
+              }
             }
           }
           break;
-        default: cp = (unsigned char)c;
+        default:
+          cp = (unsigned char)c;
       }
       putUtf8(out, cap, pos, cp, trunc);
       i++;
@@ -198,10 +361,21 @@ bool jsonGetString(const char* s, size_t len, const char* key, char* out, size_t
     // raw byte; copy whole UTF-8 sequence atomically
     const unsigned char b = (unsigned char)s[i];
     size_t n = 1;
-    if (b >= 0xF0) n = 4; else if (b >= 0xE0) n = 3; else if (b >= 0xC0) n = 2;
+    if (b >= 0xF0)
+      n = 4;
+    else if (b >= 0xE0)
+      n = 3;
+    else if (b >= 0xC0)
+      n = 2;
     if (i + n > len) break;
-    if (pos + n >= cap) { trunc = true; i += n; continue; }
-    memcpy(out + pos, s + i, n); pos += n; i += n;
+    if (pos + n >= cap) {
+      trunc = true;
+      i += n;
+      continue;
+    }
+    memcpy(out + pos, s + i, n);
+    pos += n;
+    i += n;
   }
   out[pos] = '\0';
   if (truncated) *truncated = trunc;
@@ -212,7 +386,8 @@ bool jsonGetInt(const char* s, size_t len, const char* key, long& value) {
   size_t i = findTopLevelValue(s, len, key);
   if (i >= len) return false;
   if (s[i] != '-' && (s[i] < '0' || s[i] > '9')) return false;
-  char buf[24]; size_t n = 0;
+  char buf[24];
+  size_t n = 0;
   while (i < len && n < sizeof(buf) - 1 && (s[i] == '-' || (s[i] >= '0' && s[i] <= '9'))) buf[n++] = s[i++];
   buf[n] = '\0';
   value = strtol(buf, nullptr, 10);
@@ -222,8 +397,14 @@ bool jsonGetInt(const char* s, size_t len, const char* key, long& value) {
 bool jsonGetBool(const char* s, size_t len, const char* key, bool& value) {
   size_t i = findTopLevelValue(s, len, key);
   if (i >= len) return false;
-  if (len - i >= 4 && memcmp(s + i, "true", 4) == 0) { value = true; return true; }
-  if (len - i >= 5 && memcmp(s + i, "false", 5) == 0) { value = false; return true; }
+  if (len - i >= 4 && memcmp(s + i, "true", 4) == 0) {
+    value = true;
+    return true;
+  }
+  if (len - i >= 5 && memcmp(s + i, "false", 5) == 0) {
+    value = false;
+    return true;
+  }
   return false;
 }
 
@@ -236,13 +417,18 @@ AskResponse parseAskResponse(int httpStatus, const char* body, size_t len, char*
   bool wireTrunc = false;
   if (body) jsonGetBool(body, len, "trunc", wireTrunc);
   r.truncated = trunc || wireTrunc;
-  if (httpStatus >= 200 && httpStatus < 300 && hasText && textOut[0]) { r.ok = true; return r; }
+  if (httpStatus >= 200 && httpStatus < 300 && hasText && textOut[0]) {
+    r.ok = true;
+    return r;
+  }
   char err[24] = {0};
   if (body) jsonGetString(body, len, "error", err, sizeof(err));
   r.revoked = httpStatus == 401 && strcmp(err, "revoked") == 0;
   r.noProvider = httpStatus == 402 && strcmp(err, "no_provider") == 0;
   if (!hasText || !textOut[0]) {
-    const char* fallback = httpStatus <= 0 ? "No connection to the relay." : httpStatus == 401 ? "This reader is not paired." : "The relay returned an error.";
+    const char* fallback = httpStatus <= 0     ? "No connection to the relay."
+                           : httpStatus == 401 ? "This reader is not paired."
+                                               : "The relay returned an error.";
     snprintf(textOut, textCap, "%s", fallback);
   }
   return r;
@@ -266,9 +452,18 @@ PairPoll parsePairPoll(int httpStatus, const char* body, size_t len) {
   if (!body) return p;
   char st[16] = {0};
   if (!jsonGetString(body, len, "status", st, sizeof(st))) return p;
-  if (strcmp(st, "pending") == 0) { p.status = PairStatus::Pending; return p; }
-  if (strcmp(st, "expired") == 0) { p.status = PairStatus::Expired; return p; }
-  if (strcmp(st, "denied") == 0) { p.status = PairStatus::Denied; return p; }
+  if (strcmp(st, "pending") == 0) {
+    p.status = PairStatus::Pending;
+    return p;
+  }
+  if (strcmp(st, "expired") == 0) {
+    p.status = PairStatus::Expired;
+    return p;
+  }
+  if (strcmp(st, "denied") == 0) {
+    p.status = PairStatus::Denied;
+    return p;
+  }
   if (strcmp(st, "ok") == 0 && httpStatus >= 200 && httpStatus < 300) {
     if (!jsonGetString(body, len, "device_token", p.deviceToken, sizeof(p.deviceToken)) || !p.deviceToken[0]) return p;
     jsonGetString(body, len, "device_id", p.deviceId, sizeof(p.deviceId));
@@ -279,7 +474,10 @@ PairPoll parsePairPoll(int httpStatus, const char* body, size_t len) {
 }
 
 size_t choosePassageWindow(const char* text, size_t len, size_t focus, size_t maxBytes, size_t& start) {
-  if (len <= maxBytes) { start = 0; return len; }
+  if (len <= maxBytes) {
+    start = 0;
+    return len;
+  }
   if (focus > len) focus = len;
   // Centre the window on focus, clamp to the text.
   size_t s = focus > maxBytes / 2 ? focus - maxBytes / 2 : 0;
