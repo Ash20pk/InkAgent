@@ -22,20 +22,11 @@ class AppDrawerActivity : public Activity {
 
  private:
   enum class Target {
-    FILE_BROWSER,
     RECENTS,
+    OPDS_BROWSER,
     WORD_LIST,
     HIGHLIGHTS,
-    OPDS_BROWSER,
-    FILE_TRANSFER,
-    WIFI,
-    FRONTLIGHT,
-    SETTINGS_APP,
-    USB_DRIVE,
-    CALIBRE,
-    FONTS,
-    FIRMWARE_UPDATE,
-    ABOUT,
+    READ_LATER,
     // Registered by an app under src/apps/ rather than built in; the AppInfo
     // on the entry says which.
     REGISTERED_APP,

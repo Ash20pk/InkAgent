@@ -28,6 +28,7 @@
 #include "SettingsList.h"
 #include "StatusBarSettingsActivity.h"
 #include "TextSettingsActivity.h"
+#include "activities/network/CalibreConnectActivity.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/util/IntervalSelectionActivity.h"
 #include "components/UITheme.h"
@@ -89,6 +90,10 @@ void SettingsActivity::rebuildSettingsLists() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_ASK_BOOK, SettingAction::AskBook));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
+  // Getting books onto the device. These used to hang off Home and then the app
+  // drawer; the drawer is for reading, so the ways of filling it live here.
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_FILE_TRANSFER, SettingAction::FileTransfer));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_CALIBRE_WIRELESS, SettingAction::Calibre));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_CLEAR_READING_CACHE, SettingAction::ClearCache));
   // OTA fetches this board's own release asset (see OtaUpdater); boards whose
   // asset isn't published yet just report no update available.
@@ -335,6 +340,14 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::Network:
         startActivityForResult(std::make_unique<WifiSelectionActivity>(renderer, mappedInput, false), resultHandler);
+        break;
+      case SettingAction::FileTransfer:
+        // Replaces rather than stacks: the web server owns the screen until the
+        // user leaves it, exactly as it did from Home.
+        activityManager.goToFileTransfer();
+        break;
+      case SettingAction::Calibre:
+        startActivityForResult(std::make_unique<CalibreConnectActivity>(renderer, mappedInput), resultHandler);
         break;
       case SettingAction::ClearCache:
         startActivityForResult(std::make_unique<ClearCacheActivity>(renderer, mappedInput), resultHandler);

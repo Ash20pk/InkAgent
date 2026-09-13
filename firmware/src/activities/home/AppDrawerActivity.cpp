@@ -8,18 +8,9 @@
 #include "OpdsServerStore.h"
 #include "activities/browser/OpdsBookBrowserActivity.h"
 #include "activities/highlights/HighlightsActivity.h"
-#include "activities/home/FileBrowserActivity.h"
 #include "activities/home/RecentBooksActivity.h"
-#include "activities/network/CalibreConnectActivity.h"
-#include "activities/network/InkAgentWebServerActivity.h"
-#include "activities/network/UsbDriveActivity.h"
-#include "activities/network/WifiSelectionActivity.h"
-#include "activities/settings/AboutActivity.h"
-#include "activities/settings/FontDownloadActivity.h"
+#include "activities/readlater/ReadLaterActivity.h"
 #include "activities/settings/OpdsServerListActivity.h"
-#include "activities/settings/OtaUpdateActivity.h"
-#include "activities/settings/SettingsActivity.h"
-#include "activities/util/FrontlightPanelActivity.h"
 #include "activities/words/WordListActivity.h"
 #include "components/UITheme.h"
 #include "components/icons/drawerIcons.h"
@@ -52,34 +43,18 @@ void blitIcon(const GfxRenderer& renderer, const freeink::Icon& icon, const int 
 const freeink::Icon& iconFor(const int index, const StrId label) {
   (void)index;
   switch (label) {
-    case StrId::STR_BROWSE_FILES:
-      return icon_folder_32;
     case StrId::STR_MENU_RECENT_BOOKS:
       return icon_book_32;
     case StrId::STR_OPDS_BROWSER:
       return icon_library_32;
-    case StrId::STR_FILE_TRANSFER:
-      return icon_upload_32;
-    case StrId::STR_WIFI_NETWORKS:
-      return icon_wifi_32;
-    case StrId::STR_FRONTLIGHT:
-      return icon_sun_32;
     case StrId::STR_WORD_LIST:
       return icon_words_32;
     case StrId::STR_HIGHLIGHTS:
       return icon_bookmark_32;
-    case StrId::STR_USB_DRIVE:
-      return icon_usb_32;
-    case StrId::STR_CALIBRE_WIRELESS:
-      return icon_calibre_32;
-    case StrId::STR_MANAGE_FONTS:
-      return icon_fonts_32;
-    case StrId::STR_CHECK_UPDATES:
-      return icon_download_32;
-    case StrId::STR_SETTINGS_TITLE:
-      return icon_settings_32;
+    case StrId::STR_READ_LATER:
+      return icon_inbox_32;
     default:
-      return icon_info_32;
+      return icon_apps_32;
   }
 }
 }  // namespace
@@ -91,25 +66,14 @@ void AppDrawerActivity::onEnter() {
   Activity::onEnter();
 
   entries = {
-      {Target::FILE_BROWSER, StrId::STR_BROWSE_FILES},
       {Target::RECENTS, StrId::STR_MENU_RECENT_BOOKS},
       {Target::WORD_LIST, StrId::STR_WORD_LIST},
       {Target::HIGHLIGHTS, StrId::STR_HIGHLIGHTS},
+      {Target::READ_LATER, StrId::STR_READ_LATER},
   };
+  // Only when there is somewhere to browse: a tile that opens an empty server
+  // picker is a dead tile.
   if (OPDS_STORE.hasServers()) entries.push_back({Target::OPDS_BROWSER, StrId::STR_OPDS_BROWSER});
-  entries.push_back({Target::FILE_TRANSFER, StrId::STR_FILE_TRANSFER});
-  entries.push_back({Target::WIFI, StrId::STR_WIFI_NETWORKS});
-#if FREEINK_CAP_FRONTLIGHT
-  entries.push_back({Target::FRONTLIGHT, StrId::STR_FRONTLIGHT});
-#endif
-#if FREEINK_CAP_USB_MSC
-  entries.push_back({Target::USB_DRIVE, StrId::STR_USB_DRIVE});
-#endif
-  entries.push_back({Target::CALIBRE, StrId::STR_CALIBRE_WIRELESS});
-  entries.push_back({Target::FONTS, StrId::STR_MANAGE_FONTS});
-  entries.push_back({Target::FIRMWARE_UPDATE, StrId::STR_CHECK_UPDATES});
-  entries.push_back({Target::SETTINGS_APP, StrId::STR_SETTINGS_TITLE});
-  entries.push_back({Target::ABOUT, StrId::STR_ABOUT});
 
   // Apps registered under src/apps/ land after the built-ins, in link order.
   for (const inkapp::AppInfo* app = inkapp::apps(); app != nullptr; app = app->next) {
@@ -250,20 +214,11 @@ void AppDrawerActivity::activate(const Target target) {
   }
 
   switch (target) {
-    // Everything here is pushed rather than routed through ActivityManager's
-    // goTo* helpers: those replace the activity and clear the stack, which left
-    // Back falling through to Home instead of returning to the drawer.
-    case Target::FILE_BROWSER:
-      push(makeUniqueNoThrow<FileBrowserActivity>(renderer, mappedInput, std::string{}), "Files");
-      break;
+    // Pushed rather than routed through ActivityManager's goTo* helpers: those
+    // replace the activity and clear the stack, which leaves Back falling
+    // through to Home instead of returning to the drawer.
     case Target::RECENTS:
       push(makeUniqueNoThrow<RecentBooksActivity>(renderer, mappedInput), "Recents");
-      break;
-    case Target::WORD_LIST:
-      push(makeUniqueNoThrow<WordListActivity>(renderer, mappedInput), "Word List");
-      break;
-    case Target::HIGHLIGHTS:
-      push(makeUniqueNoThrow<HighlightsActivity>(renderer, mappedInput), "Highlights");
       break;
     case Target::OPDS_BROWSER: {
       // Mirrors goToBrowser(): a single configured server skips the picker.
@@ -275,34 +230,14 @@ void AppDrawerActivity::activate(const Target target) {
       }
       break;
     }
-    case Target::FILE_TRANSFER:
-      push(makeUniqueNoThrow<InkAgentWebServerActivity>(renderer, mappedInput), "File Transfer");
+    case Target::WORD_LIST:
+      push(makeUniqueNoThrow<WordListActivity>(renderer, mappedInput), "Word List");
       break;
-    case Target::SETTINGS_APP:
-      push(makeUniqueNoThrow<SettingsActivity>(renderer, mappedInput), "Settings");
+    case Target::HIGHLIGHTS:
+      push(makeUniqueNoThrow<HighlightsActivity>(renderer, mappedInput), "Highlights");
       break;
-    case Target::USB_DRIVE:
-      // Left on the replace path on purpose: UsbDriveActivity owns the raw SD
-      // card and must not have another activity live underneath it.
-      activityManager.goToUsbDrive();
-      break;
-    case Target::CALIBRE:
-      push(makeUniqueNoThrow<CalibreConnectActivity>(renderer, mappedInput), "Calibre");
-      break;
-    case Target::FONTS:
-      push(makeUniqueNoThrow<FontDownloadActivity>(renderer, mappedInput), "Fonts");
-      break;
-    case Target::FIRMWARE_UPDATE:
-      push(makeUniqueNoThrow<OtaUpdateActivity>(renderer, mappedInput), "Firmware Update");
-      break;
-    case Target::WIFI:
-      push(makeUniqueNoThrow<WifiSelectionActivity>(renderer, mappedInput, false), "Wi-Fi");
-      break;
-    case Target::FRONTLIGHT:
-      push(makeUniqueNoThrow<FrontlightPanelActivity>(renderer, mappedInput), "Frontlight");
-      break;
-    case Target::ABOUT:
-      push(makeUniqueNoThrow<AboutActivity>(renderer, mappedInput), "About");
+    case Target::READ_LATER:
+      push(makeUniqueNoThrow<ReadLaterActivity>(renderer, mappedInput), "Read Later");
       break;
     case Target::REGISTERED_APP:
       break;  // handled above

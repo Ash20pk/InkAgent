@@ -26,6 +26,8 @@ enum class SettingAction {
   TextSettings,
   KeyboardLayouts,
   AskBook,
+  FileTransfer,
+  Calibre,
   About,
 };
 
