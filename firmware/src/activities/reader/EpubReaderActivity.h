@@ -132,7 +132,9 @@ class EpubReaderActivity final : public ReaderActivity {
   uint32_t sessionDwellTotalMs = 0;
   // Pace on this stretch as a percentage of the reader's own running average,
   // or -1 before there is enough of a baseline to divide by.
+  uint32_t sessionMeanPageMs() const;
   int sessionSpeedPct() const;
+  void foldSessionIntoBaseline();
   void queueBackgroundRecall();
   void onExit() override;
 

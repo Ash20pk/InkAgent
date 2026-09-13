@@ -9,8 +9,7 @@ bool isRecentIndex(const uint16_t* recentImages, uint8_t recentPos, uint8_t rece
                    uint8_t checkCount) {
   const uint8_t effectiveCount = std::min(checkCount, recentFill);
   for (uint8_t i = 0; i < effectiveCount; i++) {
-    const uint8_t slot =
-        (recentPos + InkAgentState::SLEEP_RECENT_COUNT - 1 - i) % InkAgentState::SLEEP_RECENT_COUNT;
+    const uint8_t slot = (recentPos + InkAgentState::SLEEP_RECENT_COUNT - 1 - i) % InkAgentState::SLEEP_RECENT_COUNT;
     if (recentImages[slot] == idx) return true;
   }
   return false;
@@ -42,6 +41,8 @@ void InkAgentState::pushRecentOverlaySleep(uint16_t idx) {
 
 void InkAgentState::toJson(JsonDocument& doc) const {
   doc["openEpubPath"] = openEpubPath;
+  doc["readerBaselineMs"] = readerBaselineMs;
+  doc["readerBaselineSessions"] = readerBaselineSessions;
   JsonArray recentArr = doc["recentSleepImages"].to<JsonArray>();
   for (int i = 0; i < SLEEP_RECENT_COUNT; i++) recentArr.add(recentSleepImages[i]);
   doc["recentSleepPos"] = recentSleepPos;
@@ -57,6 +58,8 @@ void InkAgentState::toJson(JsonDocument& doc) const {
 
 bool InkAgentState::fromJson(JsonVariantConst doc) {
   openEpubPath = doc["openEpubPath"] | "";
+  readerBaselineMs = doc["readerBaselineMs"] | 0u;
+  readerBaselineSessions = doc["readerBaselineSessions"] | 0;
 
   memset(recentSleepImages, 0, sizeof(recentSleepImages));
   JsonArrayConst recentArr = doc["recentSleepImages"];

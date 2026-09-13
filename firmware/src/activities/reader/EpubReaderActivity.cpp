@@ -39,6 +39,7 @@
 #include "ReaderFontSizes.h"
 #include "ReaderToolbarUi.h"
 #include "ReaderUtils.h"
+#include "ReadingPace.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "activities/agent/AskBookActivity.h"
@@ -1560,33 +1561,20 @@ void EpubReaderActivity::clearDeferredReposition() {
   cachedVisibleTextOffset.reset();
 }
 
-int EpubReaderActivity::sessionSpeedPct() const {
-  // Needs a few pages before a ratio means anything; a two-page session would
-  // report whatever the first turn happened to cost.
-  constexpr uint32_t kMinPages = 5;
-  if (sessionForwardTurns < kMinPages || sessionDwellTotalMs == 0) return -1;
-  const uint32_t meanMs = sessionDwellTotalMs / sessionForwardTurns;
-  if (meanMs == 0) return -1;
-  // The baseline is this reader's own typical page, not anyone else's: 25s is
-  // the starting assumption until a per-reader baseline is persisted.
-  constexpr uint32_t kBaselineMs = 25000;
-  // Slower reading means a longer dwell, so the ratio inverts: 50s a page on a
-  // 25s baseline is 50% of normal pace.
-  const uint32_t pct = (kBaselineMs * 100) / meanMs;
-  return static_cast<int>(pct > 400 ? 400 : pct);
-}
-
-// Hands the passage the reader just left to the background task, if the reader
-// opted in. Everything is copied, so it is safe to call while this activity is
-// being torn down — the task will not touch anything here again.
 void EpubReaderActivity::onExit() {
   // Queue before the base class tears anything down: this needs the section and
   // the EPUB, and they are gone shortly after. The task waits for the heap they
   // are holding before it opens TLS.
   queueBackgroundRecall();
+  // After the question is queued, never before: a session must be compared with
+  // the baseline as it stood, not with one it has already moved.
+  foldSessionIntoBaseline();
   ReaderActivity::onExit();
 }
 
+// Hands the passage the reader just left to the background task, if the reader
+// opted in. Everything is copied, so it is safe to call while this activity is
+// being torn down — the task will not touch anything here again.
 void EpubReaderActivity::queueBackgroundRecall() {
   if (!section || !epub) return;
 
@@ -1619,6 +1607,26 @@ void EpubReaderActivity::queueBackgroundRecall() {
   req.regressions = static_cast<int>(sessionRegressions);
   req.speedRatioPct = sessionSpeedPct();
   RelayTask::submitRecall(req);
+}
+
+uint32_t EpubReaderActivity::sessionMeanPageMs() const {
+  // A handful of pages before the mean means anything; a two-page session would
+  // report whatever the first turn happened to cost.
+  constexpr uint32_t kMinPages = 5;
+  if (sessionForwardTurns < kMinPages || sessionDwellTotalMs == 0) return 0;
+  return sessionDwellTotalMs / sessionForwardTurns;
+}
+
+int EpubReaderActivity::sessionSpeedPct() const {
+  return pace::comparePct(sessionMeanPageMs(), APP_STATE.readerBaselineMs, APP_STATE.readerBaselineSessions);
+}
+
+void EpubReaderActivity::foldSessionIntoBaseline() {
+  const uint32_t mean = sessionMeanPageMs();
+  if (mean == 0) return;  // too short to say anything about this reader
+  APP_STATE.readerBaselineMs = pace::fold(APP_STATE.readerBaselineMs, mean, APP_STATE.readerBaselineSessions);
+  if (APP_STATE.readerBaselineSessions < UINT16_MAX) APP_STATE.readerBaselineSessions++;
+  APP_STATE.saveToFile();
 }
 
 bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {

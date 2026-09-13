@@ -23,6 +23,11 @@ class InkAgentState : public PersistableStore<InkAgentState> {
   uint8_t readerActivityLoadCount = 0;
   bool lastSleepFromReader = false;
   bool showBootScreen = true;
+  // This reader's own typical page, in milliseconds, and how many sessions have
+  // gone into it. The agent's "slower than usual" is measured against this and
+  // against nothing else.
+  uint32_t readerBaselineMs = 0;
+  uint16_t readerBaselineSessions = 0;
 
   static const char* getFilePath() { return "/.inkagent/state.json"; }
   void toJson(JsonDocument& doc) const;
