@@ -102,7 +102,10 @@ export function deviceRoutes(db, { publicUrl, fetchImpl }) {
       try {
         const r = await runEngage({ provider: { baseUrl: p.base_url, apiKey: p.api_key, model: p.model }, req: b, budget: d.budget, fetchImpl });
         q.turn.run(sid, d.id, `engage:${b.app}`, JSON.stringify(b), r.full, r.text, r.truncated ? 1 : 0, r.model, r.latencyMs, now());
-        json(res, 200, { screen: r.screen, sid, trunc: r.truncated });
+        // `text` duplicates the row the screen carries, deliberately: the device
+        // caches the screen opaquely for the renderer and shows `text` immediately,
+        // and parsing a nested array on the device to recover it would be worse.
+        json(res, 200, { screen: r.screen, text: r.text, sid, trunc: r.truncated });
       } catch (e) {
         if (!(e instanceof ProviderError)) throw e;
         q.turn.run(sid, d.id, `engage:${b.app}`, JSON.stringify(b), '', `ERR ${e.message}`, 0, p.model, 0, now());

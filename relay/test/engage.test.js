@@ -41,6 +41,7 @@ test('happy path returns a screen in the device manifest vocabulary, not prose',
   assert.equal(s.rows[0].kind, 'text');
   assert.equal(s.rows[0].center, true);
   assert.match(s.rows[0].text, /\?$/, 'the row carries a question');
+  assert.equal(r.json.text, s.rows[0].text, 'plain text mirrors the row, so the device need not parse the screen');
   assert.ok(!('prompt' in s.rows[0]), 'no fields the firmware parser does not know');
   P.close();
 });
@@ -58,7 +59,7 @@ test('the agent elicits: the model is told to ask and never to answer', async ()
 test('behavioural features steer the question without ever being quoted back', async () => {
   const P = await startMockProvider({ reply: () => 'Which detail did she miss?' });
   await R.setProvider(cookie, P.url);
-  const r = await engage({ app: 'recall', text: PASSAGE, features: { regressions: 3, speedRatio: 0.6 } });
+  const r = await engage({ app: 'recall', text: PASSAGE, features: { regressions: 3, speedPct: 60 } });
   assert.equal(r.status, 200);
   const system = P.calls[0].body.messages[0].content;
   assert.match(system, /went back over this stretch/);

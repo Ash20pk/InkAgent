@@ -62,7 +62,10 @@ function buildMessages(req) {
   if (Number.isFinite(f.regressions) && f.regressions >= 2) {
     signals.push('The reader went back over this stretch more than once, so favour the part most likely to have been missed.');
   }
-  if (Number.isFinite(f.speedRatio) && f.speedRatio < 0.8) {
+  // speedPct is the reader's pace as a percentage of their own baseline. The
+  // device sends an integer because its wire builder has no floats; anything
+  // under 80 means this stretch went slower than usual for them.
+  if (Number.isFinite(f.speedPct) && f.speedPct > 0 && f.speedPct < 80) {
     signals.push('The reader slowed down here relative to their usual pace.');
   }
 
