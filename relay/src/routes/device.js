@@ -1,6 +1,7 @@
 import { json, readBody } from '../http.js';
 import { now, id, sha, userCode } from '../db.js';
 import { runAsk, validateAsk, ProviderError } from '../agent.js';
+import { runEngage, validateEngage, APPS as ENGAGE_APPS } from '../engage.js';
 
 const PAIR_TTL = 600, PAIR_INTERVAL = 5;
 
@@ -60,7 +61,9 @@ export function deviceRoutes(db, { publicUrl, fetchImpl }) {
     'GET /v1/config': async ({ req, res }) => {
       const d = auth(req, res); if (!d) return;
       const p = q.provider.get(d.user_id);
-      json(res, 200, { budget: d.budget, brief_interval_s: 21600, provider: p ? p.kind : null, cards: Object.keys(KINDS_PUBLIC).map(k => ({ id: k, name: KINDS_PUBLIC[k] })) });
+      json(res, 200, { budget: d.budget, brief_interval_s: 21600, provider: p ? p.kind : null,
+                       cards: Object.keys(KINDS_PUBLIC).map(k => ({ id: k, name: KINDS_PUBLIC[k] })),
+                       engage: Object.keys(ENGAGE_APPS) });
     },
 
     'POST /v1/ask': async ({ req, res }) => {
@@ -82,6 +85,33 @@ export function deviceRoutes(db, { publicUrl, fetchImpl }) {
              { error: 'provider', sid, text: e.status === 401 || e.status === 403
                ? 'Your AI key was rejected. Check it on the dashboard.'
                : e.retryable ? 'The AI is busy or unreachable. Try again in a moment.' : 'The AI returned nothing useful. Try again.' });
+      }
+    },
+
+    // The agent composes a screen; the device renders it. Same token, same
+    // budget contract and the same 401/402 semantics as /v1/ask, so the device
+    // has one set of failure paths to understand rather than two.
+    'POST /v1/engage': async ({ req, res }) => {
+      const d = auth(req, res); if (!d) return;
+      const b = await readBody(req);
+      const bad = validateEngage(b, d.budget);
+      if (bad) return json(res, 400, { error: bad, text: 'The reader sent a request the relay did not understand.' });
+      const p = q.provider.get(d.user_id);
+      if (!p) return json(res, 402, { error: 'no_provider', text: 'No AI connected yet. Open the dashboard and add a key or an endpoint.' });
+      const sid = id(9);
+      try {
+        const r = await runEngage({ provider: { baseUrl: p.base_url, apiKey: p.api_key, model: p.model }, req: b, budget: d.budget, fetchImpl });
+        q.turn.run(sid, d.id, `engage:${b.app}`, JSON.stringify(b), r.full, r.text, r.truncated ? 1 : 0, r.model, r.latencyMs, now());
+        json(res, 200, { screen: r.screen, sid, trunc: r.truncated });
+      } catch (e) {
+        if (!(e instanceof ProviderError)) throw e;
+        q.turn.run(sid, d.id, `engage:${b.app}`, JSON.stringify(b), '', `ERR ${e.message}`, 0, p.model, 0, now());
+        // No screen on failure: the device keeps whatever it cached last rather
+        // than replacing a good question with an error on an ambient surface.
+        json(res, e.status === 401 || e.status === 403 ? 402 : 503,
+             { error: 'provider', sid, text: e.status === 401 || e.status === 403
+               ? 'Your AI key was rejected. Check it on the dashboard.'
+               : 'The AI is busy or unreachable. Try again in a moment.' });
       }
     },
 
