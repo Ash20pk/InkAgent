@@ -9,11 +9,13 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <string>
 
+#include "AboutActivity.h"
 #include "ButtonRemapActivity.h"
 #include "ClearCacheActivity.h"
-#include "InkAgentSettings.h"
 #include "FontDownloadActivity.h"
+#include "InkAgentSettings.h"
 #include "InkAgentSettingsActivity.h"
 #include "KOReaderSettingsActivity.h"
 #include "KeyboardLayoutsActivity.h"
@@ -58,8 +60,7 @@ void SettingsActivity::rebuildSettingsLists() {
     if (setting.category == StrId::STR_CAT_DISPLAY) {
       // The sunlight fading fix is a grayscale-waveform compensation that does
       // not apply on the X4 Pro / X4 Classic (plain OTP waveform, same panels).
-      if (setting.valuePtr == &InkAgentSettings::fadingFix &&
-          (BoardConfig::isX4Pro() || BoardConfig::isX4Classic())) {
+      if (setting.valuePtr == &InkAgentSettings::fadingFix && (BoardConfig::isX4Pro() || BoardConfig::isX4Classic())) {
         continue;
       }
       displaySettings.push_back(setting);
@@ -95,6 +96,9 @@ void SettingsActivity::rebuildSettingsLists() {
   systemSettings.push_back(SettingInfo::Action(StrId::STR_SD_FIRMWARE_UPDATE, SettingAction::SdFirmwareUpdate));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_LANGUAGE, SettingAction::Language));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KEYBOARD_LAYOUTS, SettingAction::KeyboardLayouts));
+  // Last in System: build and hardware identity, the detail the header used to
+  // carry.
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_ABOUT, SettingAction::About));
   readerSettings.insert(readerSettings.begin(),
                         SettingInfo::Action(StrId::STR_TEXT_SETTINGS, SettingAction::TextSettings));
   readerSettings.insert(readerSettings.begin() + 1,
@@ -203,18 +207,6 @@ void SettingsActivity::onExit() {
   UITheme::getInstance().reload();  // Re-apply theme in case it was changed
 }
 
-void SettingsActivity::applyUiSettingChange(uint8_t InkAgentSettings::* valuePtr) {
-  // Theme changes take effect immediately, on this screen — reload the theme
-  // and re-derive the app's tokens so the very next repaint is in the new look.
-  if (valuePtr != &InkAgentSettings::uiTheme) {
-    return;
-  }
-  UITheme::getInstance().reload();
-  // Re-derive the shared tokens for the new look; the gate stays closed until
-  // the repaint that rebuilds the interaction table in the new layout.
-  resetUi();
-}
-
 bool SettingsActivity::handleCustomInput() {
   return optionPopup.handleInput(mappedInput, [this] { requestUpdate(); });
 }
@@ -284,7 +276,6 @@ void SettingsActivity::toggleCurrentSetting() {
                          syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
                          SETTINGS.saveToFile();
                          rebuildSettingsLists();
-                         applyUiSettingChange(valuePtr);
                        });
       requestUpdate();
       return;
@@ -324,6 +315,9 @@ void SettingsActivity::toggleCurrentSetting() {
     auto resultHandler = [this](const ActivityResult&) { SETTINGS.saveToFile(); };
 
     switch (setting.action) {
+      case SettingAction::About:
+        startActivityForResult(std::make_unique<AboutActivity>(renderer, mappedInput), resultHandler);
+        break;
       case SettingAction::RemapFrontButtons:
         startActivityForResult(std::make_unique<ButtonRemapActivity>(renderer, mappedInput), resultHandler);
         break;
@@ -395,7 +389,6 @@ void SettingsActivity::toggleCurrentSetting() {
   syncQuickResumeTimeoutForSleepScreen(sleepScreenChanged, quickResumeTimeoutChanged);
   SETTINGS.saveToFile();
   rebuildSettingsLists();
-  applyUiSettingChange(setting.valuePtr);
   activeNav().selected = std::min(ringPos(), settingsCount);
 }
 
@@ -521,8 +514,9 @@ void SettingsActivity::render(RenderLock&&) {
   // indicator; the rest of the screen renders through the app.
   // Version rides in the header's trailing label slot: the footer position
   // conflicts with button hints on non-touch devices.
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE),
-                 INKAGENT_VERSION);
+  // No version here: it lives under System > About. The header keeps the
+  // battery and the title, like every other screen.
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, tr(STR_SETTINGS_TITLE));
 
   renderUi();
 

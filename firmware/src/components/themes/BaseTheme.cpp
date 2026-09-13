@@ -290,8 +290,11 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   // Header status text (battery percent, right label) stays at the fixed
   // small font like the legacy headers; the uiScale small font is for list
   // subtitles.
-  ui.target.setFont(fui::GfxRendererTarget::FONT_SMALL, SMALL_FONT_ID);
   const ThemeMetrics& metrics = UITheme::getInstance().getMetrics();
+  // Themes that put a clock in the title slot want the battery percent at the
+  // same size; everything measured off FONT_SMALL below follows automatically.
+  ui.target.setFont(fui::GfxRendererTarget::FONT_SMALL,
+                    metrics.headerStatusUsesTitleFont ? spec.titleFontId : SMALL_FONT_ID);
   const fui::Rect band{static_cast<int16_t>(rect.x), static_cast<int16_t>(rect.y), static_cast<int16_t>(rect.width),
                        static_cast<int16_t>(rect.height)};
 
@@ -302,7 +305,7 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   snprintf(percentText, sizeof(percentText), "%u%%", static_cast<unsigned>(percentage));
   // The icon glyph extends 2px past glyphWidth (terminal nub); reserve it or
   // the percent label's rect comes up short and the text truncates.
-  constexpr int16_t batteryNubWidth = 2;
+  const int16_t batteryNubWidth = metrics.headerBatteryBarStyle ? 0 : 2;
   int16_t batteryReserve = static_cast<int16_t>(metrics.batteryWidth + batteryNubWidth);
   if (showBatteryPercentage) {
     batteryReserve = static_cast<int16_t>(
@@ -363,6 +366,16 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   battery.text = tokens.smallText;
   battery.glyphWidth = static_cast<int16_t>(metrics.batteryWidth);
   battery.glyphHeight = static_cast<int16_t>(metrics.batteryHeight);
+  if (metrics.headerBatteryBarStyle) {
+    // Outlined track with a dithered fill: the level reads as grey rather than
+    // as the darkest mark in the bar, matching the theme's other chrome. The
+    // bar has no terminal nub, so it carries its weight through height instead.
+    battery.style = fui::BatteryIndicatorStyle::Bar;
+    battery.barTrack = fui::BatteryBarTrack::Outline;
+    battery.barFill = fui::BatteryBarFill::Dither;
+    battery.barRadius = 2;
+    battery.barCaps = fui::BatteryBarCaps::Pixel;
+  }
   battery.gap = batteryPercentSpacing;
   // Detached: hug the corner (12px, the legacy inset) within the battery
   // strip; shared line: sit on the content grid. Both anchor to the band's top
@@ -372,8 +385,22 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   const int16_t batteryEdgeInset = batteryDetached ? 12 : tokens.headerSidePadding;
   const int16_t batteryX = batteryLeft ? static_cast<int16_t>(band.x + batteryEdgeInset)
                                        : static_cast<int16_t>(band.right() - batteryEdgeInset - batteryReserve);
-  const int16_t batteryH = static_cast<int16_t>(metrics.batteryBarHeight);
-  fui::batteryIndicator(ui.frame, fui::Rect{batteryX, band.y, batteryReserve, batteryH}, battery);
+  // The component centres the glyph and the percent label in this same rect, so
+  // they share a centre line - but only while the rect is at least as tall as
+  // the label's line box. Below that, drawText's max(0, ...) clamp pins the text
+  // to the top and the two drift apart, which is what a taller status font
+  // (headerStatusUsesTitleFont) causes. Growing the rect to the line height
+  // keeps both centred; band.y is nudged up by half the growth so the pair stays
+  // on the strip rather than sliding down the band.
+  const int16_t labelLineH = ui.target.lineHeight(fui::GfxRendererTarget::FONT_SMALL);
+  int16_t batteryH = static_cast<int16_t>(metrics.batteryBarHeight);
+  int16_t batteryY = band.y;
+  if (showBatteryPercentage && labelLineH > batteryH) {
+    batteryY = static_cast<int16_t>(band.y - (labelLineH - batteryH) / 2);
+    if (batteryY < band.y - metrics.topPadding) batteryY = static_cast<int16_t>(band.y - metrics.topPadding);
+    batteryH = labelLineH;
+  }
+  fui::batteryIndicator(ui.frame, fui::Rect{batteryX, batteryY, batteryReserve, batteryH}, battery);
 
   if (manualRightLabel) {
     const fui::Size labelSize = ui.target.measureText(fui::GfxRendererTarget::FONT_SMALL, subtitle, tokens.smallText);

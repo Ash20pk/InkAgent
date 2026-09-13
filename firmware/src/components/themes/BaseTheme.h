@@ -118,6 +118,22 @@ struct ThemeMetrics {
   int controlRadius;
   int sheetRadius;
   int capsuleRadius;
+  // Home header content. Classic and RoundedRaff title the home band with the
+  // current book; Canvas shows the clock there instead and leaves the book to
+  // the cover, phone status-bar style. Defaulted so existing themes are
+  // unaffected.
+  bool homeHeaderShowsClock = false;
+  // Padding above the cover card, inside the band the header leaves free.
+  int homeCoverTopPadding = 0;
+  // Header status text (battery percent, right label) uses the title font
+  // instead of the fixed small font, so it matches a clock drawn in the title
+  // slot. Defaulted off: the other themes pair a small status text with a book
+  // title and would look top-heavy.
+  bool headerStatusUsesTitleFont = false;
+  // Header battery drawn as a filled bar (rounded, outlined track, dithered
+  // fill) instead of the outlined battery icon. Defaulted off so the existing
+  // themes keep their icon.
+  bool headerBatteryBarStyle = false;
 };
 
 enum UIIcon {
@@ -134,7 +150,10 @@ enum UIIcon {
   Wifi,
   Hotspot,
   Bookmark,
-  Usb
+  Usb,
+  Apps,
+  Info,
+  Light
 };
 
 // Default theme implementation (Classic Theme)

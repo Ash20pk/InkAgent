@@ -236,10 +236,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                           {StrId::STR_PAGES_1, StrId::STR_PAGES_5, StrId::STR_PAGES_10, StrId::STR_PAGES_15,
                            StrId::STR_PAGES_30, StrId::STR_NEVER},
                           "refreshFrequency", StrId::STR_CAT_DISPLAY),
-        SettingInfo::Enum(StrId::STR_UI_THEME, &InkAgentSettings::uiTheme,
-                          {StrId::STR_THEME_CLASSIC, StrId::STR_THEME_LYRA, StrId::STR_THEME_LYRA_EXTENDED,
-                           StrId::STR_THEME_ROUNDEDRAFF},
-                          "uiTheme", StrId::STR_CAT_DISPLAY),
         SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &InkAgentSettings::fadingFix, "fadingFix",
                             StrId::STR_CAT_DISPLAY),
 #if FREEINK_CAP_FRONTLIGHT
@@ -288,8 +284,8 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
             StrId::STR_ORIENTATION, &InkAgentSettings::orientation,
             {StrId::STR_PORTRAIT, StrId::STR_LANDSCAPE_CW, StrId::STR_ORIENTATION_INVERTED, StrId::STR_LANDSCAPE_CCW},
             "orientation", StrId::STR_CAT_READER),
-        SettingInfo::Toggle(StrId::STR_EXTRA_SPACING, &InkAgentSettings::extraParagraphSpacing,
-                            "extraParagraphSpacing", StrId::STR_CAT_READER)
+        SettingInfo::Toggle(StrId::STR_EXTRA_SPACING, &InkAgentSettings::extraParagraphSpacing, "extraParagraphSpacing",
+                            StrId::STR_CAT_READER)
             .withTextSettings(),
         SettingInfo::Toggle(StrId::STR_TEXT_AA, &InkAgentSettings::textAntiAliasing, "textAntiAliasing",
                             StrId::STR_CAT_READER)
@@ -327,11 +323,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
                            StrId::STR_FOOTNOTES, StrId::STR_GO_HOME, StrId::STR_CONFIRM},
                           "shortPwrBtn", StrId::STR_CAT_CONTROLS),
 #else
-        SettingInfo::Enum(
-            StrId::STR_SHORT_PWR_BTN, &InkAgentSettings::shortPwrBtn,
-            {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH, StrId::STR_FOOTNOTES,
-             StrId::STR_GO_HOME},
-            "shortPwrBtn", StrId::STR_CAT_CONTROLS),
+        SettingInfo::Enum(StrId::STR_SHORT_PWR_BTN, &InkAgentSettings::shortPwrBtn,
+                          {StrId::STR_IGNORE, StrId::STR_SLEEP, StrId::STR_PAGE_TURN, StrId::STR_FORCE_REFRESH,
+                           StrId::STR_FOOTNOTES, StrId::STR_GO_HOME},
+                          "shortPwrBtn", StrId::STR_CAT_CONTROLS),
 #endif
         SettingInfo::Toggle(StrId::STR_PWR_BTN_FOOTNOTE_BACK, &InkAgentSettings::pwrBtnFootnoteBack,
                             "pwrBtnFootnoteBack", StrId::STR_CAT_CONTROLS),

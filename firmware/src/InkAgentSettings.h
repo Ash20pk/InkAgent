@@ -171,9 +171,6 @@ class InkAgentSettings : public PersistableStore<InkAgentSettings> {
     LONG_PRESS_BUTTON_BEHAVIOR_COUNT
   };
 
-  // UI Theme
-  enum UI_THEME { CLASSIC = 0, LYRA = 1, LYRA_3_COVERS = 2, ROUNDEDRAFF = 3 };
-
   // Image rendering in EPUB reader
   enum IMAGE_RENDERING { IMAGES_DISPLAY = 0, IMAGES_PLACEHOLDER = 1, IMAGES_SUPPRESS = 2, IMAGE_RENDERING_COUNT };
 
@@ -254,13 +251,17 @@ class InkAgentSettings : public PersistableStore<InkAgentSettings> {
   // are selectable; SdCardFontSystem::ensureLoaded() snaps this to the nearest
   // available size (and persists the snap) whenever the family changes.
   uint8_t fontPointSize = DEFAULT_FONT_POINT_SIZE;
-  uint8_t lineSpacing = TIGHT;        // default tight: denser reading
+  uint8_t lineSpacing = TIGHT;  // default tight: denser reading
   uint8_t paragraphAlignment = JUSTIFIED;
   // Auto-sleep timeout setting (default 10 minutes). Legacy sleepTimeout enum values are migration-only.
   uint8_t sleepTimeoutMinutes = 10;
   // E-ink refresh frequency (default 15 pages)
   uint8_t refreshFrequency = REFRESH_15;
-  uint8_t hyphenationEnabled = 0;
+  // On by default: the reader justifies text, and without hyphenation long words
+  // are pushed whole to the next line, stretching the gaps on the line they left
+  // and opening rivers down the page. Hyphenating lets the justifier work with
+  // smaller adjustments.
+  uint8_t hyphenationEnabled = 1;
 
   // Reader screen margin settings
   static constexpr uint8_t SCREEN_MARGIN_MIN = 5;
@@ -282,8 +283,6 @@ class InkAgentSettings : public PersistableStore<InkAgentSettings> {
   // Long-press Confirm function in EPUB reader (cycles through LONG_PRESS_MENU_FUNCTION values).
   // Defaults to Disabled so shortcut-based bookmark toggling remains opt-in.
   uint8_t longPressMenuFunction = LP_MENU_DISABLED;
-  // UI Theme
-  uint8_t uiTheme = LYRA;
   // Sunlight fading compensation
   uint8_t fadingFix = 0;
   // Power button return from footnotes (1 = enabled, 0 = disabled)
@@ -344,9 +343,7 @@ class InkAgentSettings : public PersistableStore<InkAgentSettings> {
   SdFontIdResolver sdFontIdResolver = nullptr;
   void* sdFontResolverCtx = nullptr;
 
-  uint16_t getPowerButtonDuration() const {
-    return (shortPwrBtn == InkAgentSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400;
-  }
+  uint16_t getPowerButtonDuration() const { return (shortPwrBtn == InkAgentSettings::SHORT_PWRBTN::SLEEP) ? 10 : 400; }
   int getReaderFontId() const;
 
   // Drop the SD font selection and fall back to the built-in family. The reader

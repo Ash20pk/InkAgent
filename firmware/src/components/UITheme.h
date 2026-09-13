@@ -30,7 +30,7 @@ class UITheme {
                                       EpdFontFamily::Style style = EpdFontFamily::REGULAR,
                                       TextVerticalAlignment verticalAlignment = TextVerticalAlignment::CENTER);
   void reload();
-  void setTheme(InkAgentSettings::UI_THEME type);
+  void setTheme();
   static std::string getCoverThumbPath(std::string coverBmpPath, int coverHeight);
   static UIIcon getFileIcon(const std::string& filename);
   static int getStatusBarHeight();

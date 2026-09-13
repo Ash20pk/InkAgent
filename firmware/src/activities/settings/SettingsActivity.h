@@ -26,6 +26,7 @@ enum class SettingAction {
   TextSettings,
   KeyboardLayouts,
   AskBook,
+  About,
 };
 
 struct SettingInfo {
@@ -195,7 +196,6 @@ class SettingsActivity final : public UiTabListActivity {
 
   static std::string settingValueText(const SettingInfo& setting);
   void selectCategory(int categoryIndex);
-  void applyUiSettingChange(uint8_t InkAgentSettings::* valuePtr);
 
   void enterCategory(int categoryIndex);
   void toggleCurrentSetting();
