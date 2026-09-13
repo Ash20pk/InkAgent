@@ -7,7 +7,8 @@
 
 // Bump when shipping new default values that should override a user's saved
 // file once (see fromJson migration). rev 1: GO_HOME power, tight reading, lock screen.
-#define INKAGENT_SETTINGS_REV 1u
+// rev 2: text anti-aliasing off.
+#define INKAGENT_SETTINGS_REV 2u
 
 class InkAgentSettings : public PersistableStore<InkAgentSettings> {
  private:
@@ -230,7 +231,14 @@ class InkAgentSettings : public PersistableStore<InkAgentSettings> {
   uint8_t clockHasBeenSynced = 0;
   // Text rendering settings
   uint8_t extraParagraphSpacing = 0;  // default off: tighter paragraphs
-  uint8_t textAntiAliasing = 1;
+  // Off. Anti-aliasing is a second pass: this panel reports GrayscaleBase::
+  // Separate, so the black-and-white base goes out as a complete refresh of its
+  // own — every glyph driven to full black — and only then does the grayscale
+  // overlay resolve the page to its final levels. The visible result is that a
+  // page turn snaps to black and then settles grey, and the settled text is
+  // lighter than the base was. Smooth edges are not worth watching every page
+  // arrive twice; readerTextWeight puts the weight back.
+  uint8_t textAntiAliasing = 0;
   // Stem darkening for the reading page, in pixels (0 = off). E-ink has no
   // backlight and a panel that has warmed up or aged renders a hairline serif
   // grey rather than black; a pixel of extra stroke is the difference between

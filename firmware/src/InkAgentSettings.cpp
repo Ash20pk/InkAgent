@@ -243,6 +243,9 @@ bool InkAgentSettings::fromJson(JsonVariantConst doc) {
     lineSpacing = TIGHT;
     extraParagraphSpacing = 0;
     sleepScreen = LOCK;
+    // rev 2. Applied to saved files too, not just fresh installs: the whole
+    // point is the page turn people are already watching.
+    textAntiAliasing = 0;
     needsResave = true;
     LOG_INF("CPS", "Applied settings defaults migration to rev %u", (unsigned)INKAGENT_SETTINGS_REV);
   }
