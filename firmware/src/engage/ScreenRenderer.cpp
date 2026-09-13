@@ -32,6 +32,11 @@ int drawScreenBody(GfxRenderer& renderer, const Screen& screen, const int startY
         break;
 
       case RowKind::Text: {
+        // A manifest cannot branch, so an optional row is expressed as a row
+        // bound to a source that may resolve to nothing. Collapsing it here is
+        // what keeps that honest: no conditionals in the format, no blank gap
+        // on the screen.
+        if (row.a[0] == '\0') break;
         constexpr int fontId = UI_12_FONT_ID;
         const int lineHeight = renderer.getLineHeight(fontId);
         const auto style = row.bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
@@ -78,6 +83,7 @@ int measureScreenBody(const GfxRenderer& renderer, const Screen& screen) {
         height += LOGO_SIZE + gap;
         break;
       case RowKind::Text:
+        if (row.a[0] == '\0') break;  // collapsed; see drawScreenBody
         height += renderer.getLineHeight(UI_12_FONT_ID) + gap;
         break;
       case RowKind::Rule:

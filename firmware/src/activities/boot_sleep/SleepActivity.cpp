@@ -1079,6 +1079,7 @@ void SleepActivity::renderCanvasSleepScreen() const {
       {"kind": "text", "text": {"src": "reading.title"},   "bold": true, "center": true},
       {"kind": "text", "text": {"src": "reading.author"},  "center": true, "gapAfter": 2},
       {"kind": "text", "text": {"src": "reading.percent"}, "center": true},
+      {"kind": "text", "text": {"src": "review.word"},     "center": true, "bold": true},
       {"kind": "text", "text": {"src": "device.clock"},    "center": true}
     ]
   })JSON";

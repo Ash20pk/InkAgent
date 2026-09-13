@@ -13,6 +13,7 @@
 #include "InkAgentSettings.h"
 #include "InkAgentState.h"
 #include "RecentBooksStore.h"
+#include "WordListStore.h"
 
 namespace engage {
 namespace {
@@ -81,6 +82,15 @@ bool resolveSource(const char* name, const GfxRenderer& renderer, char* out, siz
     // A book opened before progress mirroring existed has no percent yet;
     // showing nothing beats showing a confident zero.
     if (book != nullptr && book->percent >= 0) snprintf(out, cap, "%d%%", book->percent);
+    return true;
+  }
+  if (strcmp(name, "review.word") == 0) {
+    // One word, not a count: a number is a badge to feel behind on, a word is
+    // a retrieval you either do or ignore at no cost. Empty when nothing is
+    // due, and the renderer collapses the row.
+    WORD_LIST.ensureLoaded();
+    const auto due = WORD_LIST.due(halClock.dayNumber());
+    if (!due.empty()) snprintf(out, cap, "%s", due.front()->word.c_str());
     return true;
   }
   if (strcmp(name, "device.clock") == 0) {
