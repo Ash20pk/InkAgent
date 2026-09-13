@@ -17,6 +17,7 @@ void RecentBooksStore::toJson(JsonDocument& doc) const {
     obj["title"] = book.title;
     obj["author"] = book.author;
     obj["coverBmpPath"] = book.coverBmpPath;
+    obj["percent"] = book.percent;
   }
 }
 
@@ -33,6 +34,7 @@ bool RecentBooksStore::fromJson(JsonVariantConst doc) {
     book.title = obj["title"] | "";
     book.author = obj["author"] | "";
     book.coverBmpPath = obj["coverBmpPath"] | "";
+    book.percent = obj["percent"] | -1;
     recentBooks.push_back(book);
   }
 
@@ -74,6 +76,18 @@ void RecentBooksStore::updateBook(const std::string& path, const std::string& ti
     book.coverBmpPath = coverBmpPath;
     saveToFile();
   }
+}
+
+void RecentBooksStore::updateProgress(const std::string& path, const int percent) {
+  auto it =
+      std::find_if(recentBooks.begin(), recentBooks.end(), [&](const RecentBook& book) { return book.path == path; });
+  if (it == recentBooks.end()) return;
+  const int clamped = percent < 0 ? 0 : (percent > 100 ? 100 : percent);
+  // Called on every page turn: only pay for SD serialisation when the whole
+  // number the user would actually see has moved.
+  if (it->percent == clamped) return;
+  it->percent = clamped;
+  saveToFile();
 }
 
 bool RecentBooksStore::removeByPath(const std::string& path) {

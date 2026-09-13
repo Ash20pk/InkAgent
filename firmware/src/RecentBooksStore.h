@@ -10,6 +10,11 @@ struct RecentBook {
   std::string title;
   std::string author;
   std::string coverBmpPath;
+  // Last known reading position, 0-100, or -1 when the book has not been
+  // opened since progress tracking was added. Recorded by the reader so
+  // glanceable surfaces (the sleep canvas) can show it without loading the
+  // book's layout cache.
+  int percent = -1;
 
   bool operator==(const RecentBook& other) const { return path == other.path; }
 };
@@ -36,6 +41,11 @@ class RecentBooksStore : public PersistableStore<RecentBooksStore> {
 
   void updateBook(const std::string& path, const std::string& title, const std::string& author,
                   const std::string& coverBmpPath);
+
+  // Records the reading position for `path`. No-op when no entry matches.
+  // Persists only when the whole-number percent actually changed, so this is
+  // safe to call on every page turn.
+  void updateProgress(const std::string& path, int percent);
 
   // Remove the entry whose path matches (used when a book is removed from recents or finished/read).
   // Returns true if an entry was found and removed (no-op + false otherwise).

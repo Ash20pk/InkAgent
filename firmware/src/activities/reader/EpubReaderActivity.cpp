@@ -1557,7 +1557,15 @@ bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageC
                  ? currentPageVisibleOffset
                  : section->getVisibleTextOffsetForPage(static_cast<uint16_t>(currentPage));
   }
-  return EpubReaderUtils::saveProgress(*epub, spineIndex, currentPage, pageCount, offset);
+  const bool saved = EpubReaderUtils::saveProgress(*epub, spineIndex, currentPage, pageCount, offset);
+  // Mirror the position into the recents entry so glanceable surfaces (the
+  // sleep canvas) can show progress without loading the book's layout cache.
+  // updateProgress only writes when the whole number changed, so this costs
+  // nothing on most page turns.
+  if (saved && spineIndex == currentSpineIndex) {
+    RECENT_BOOKS.updateProgress(epub->getPath(), bookPercentFor(chapterPosition()));
+  }
+  return saved;
 }
 
 void EpubReaderActivity::rememberCurrentContentOffset() {
