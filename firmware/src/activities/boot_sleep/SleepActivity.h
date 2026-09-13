@@ -1,7 +1,10 @@
 #pragma once
+
+#include <memory>
 #include <string>
 
 #include "activities/Activity.h"
+#include "engage/Screen.h"
 
 class Bitmap;
 class HalFile;
@@ -27,6 +30,10 @@ class SleepActivity final : public Activity {
   // Reading state drawn from an Engage manifest: the ambient surface. Local
   // data sources only, so entering sleep never brings Wi-Fi up.
   void renderCanvasSleepScreen() const;
+  // Cap on the cached agent screen: a screen is a few hundred bytes, and a
+  // larger file is corrupt rather than ambitious.
+  static constexpr size_t kMaxAgentScreenBytes = 4096;
+  std::unique_ptr<engage::Screen> readCachedAgentScreen() const;
 
   bool fromTimeout = false;
 };

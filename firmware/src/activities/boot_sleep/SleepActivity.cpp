@@ -35,6 +35,7 @@
 #include "fontIds.h"
 #include "images/Logo120.h"
 #include "images/MoonIcon.h"
+#include "network/InkAgentClient.h"
 
 namespace {
 
@@ -1069,6 +1070,34 @@ void SleepActivity::renderLastScreenSleepScreen() const {
   }
 }
 
+// Reads the screen the agent composed on the last wake. Returns null when
+// there is none, which is the normal case on a device with no model connected
+// and must cost nothing.
+std::unique_ptr<engage::Screen> SleepActivity::readCachedAgentScreen() const {
+  HalFile f;
+  if (!Storage.openFileForRead("SLEEP", InkAgentClient::ENGAGE_CACHE, f)) return nullptr;
+  const size_t size = f.size();
+  // A screen is a few hundred bytes. Anything larger is a corrupt or hostile
+  // cache file, and reading it would cost more heap than the screen is worth.
+  if (size == 0 || size > kMaxAgentScreenBytes) {
+    f.close();
+    return nullptr;
+  }
+  auto buf = makeUniqueNoThrow<char[]>(size + 1);
+  if (!buf) {
+    f.close();
+    return nullptr;
+  }
+  const int read = f.read(reinterpret_cast<uint8_t*>(buf.get()), size);
+  f.close();
+  if (read <= 0) return nullptr;
+  buf[read] = '\0';
+
+  auto screen = makeUniqueNoThrow<engage::Screen>();
+  if (!screen || !engage::parseScreen(buf.get(), static_cast<size_t>(read), renderer, *screen)) return nullptr;
+  return screen;
+}
+
 void SleepActivity::renderCanvasSleepScreen() const {
   // The e-ink asset this device has and nothing else does: an image that costs
   // nothing to hold. So the sleep screen carries reading state rather than a
@@ -1091,10 +1120,23 @@ void SleepActivity::renderCanvasSleepScreen() const {
   }
 
   renderer.clearScreen();
-  const int bodyHeight = engage::measureScreenBody(renderer, *screen);
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const int startY = std::max(metrics.topPadding, (renderer.getScreenHeight() - bodyHeight) / 2);
-  engage::drawScreenBody(renderer, *screen, startY);
+  const int localHeight = engage::measureScreenBody(renderer, *screen);
+
+  // The agent's screen, if one was cached on the last wake. Measured first so
+  // the two blocks are centred together rather than the local block being
+  // centred and the question hanging off the bottom.
+  auto cached = readCachedAgentScreen();
+  const int agentHeight = cached ? engage::measureScreenBody(renderer, *cached) + metrics.verticalSpacing * 2 : 0;
+
+  int y = std::max(metrics.topPadding, (renderer.getScreenHeight() - (localHeight + agentHeight)) / 2);
+  y = engage::drawScreenBody(renderer, *screen, y);
+  screen.reset();  // one Screen live at a time; this runs on a tight heap
+
+  if (cached) {
+    engage::drawScreenBody(renderer, *cached, y + metrics.verticalSpacing * 2);
+    cached.reset();
+  }
 
   // Half refresh, like every other sleep screen: this is the last paint before
   // the panel holds it unpowered, so a clean frame matters more than speed.
