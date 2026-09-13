@@ -21,6 +21,10 @@ export function openDb(path = process.env.INK_DB || 'inkagent.sqlite') {
     CREATE TABLE IF NOT EXISTS providers (
       user_id TEXT PRIMARY KEY, kind TEXT NOT NULL, base_url TEXT NOT NULL,
       api_key TEXT, model TEXT NOT NULL, updated_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS apps (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL, name TEXT NOT NULL, icon TEXT NOT NULL,
+      manifest TEXT NOT NULL, updated_at INTEGER NOT NULL);
+    CREATE INDEX IF NOT EXISTS apps_by_user ON apps (user_id);
     CREATE TABLE IF NOT EXISTS turns (
       sid TEXT PRIMARY KEY, device_id TEXT NOT NULL, kind TEXT NOT NULL, request TEXT NOT NULL,
       full_text TEXT NOT NULL, sent_text TEXT NOT NULL, truncated INTEGER NOT NULL,

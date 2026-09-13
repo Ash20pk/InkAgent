@@ -6,6 +6,7 @@
 import { json, html, readBody, cookies } from '../http.js';
 import { now, id, sha } from '../db.js';
 import { timingSafeEqual } from 'node:crypto';
+import { validateManifest, SOURCES, ICONS, LIMITS } from '../manifest.js';
 
 // INK_ACCESS_CODE gates sign-in on public deployments until real OAuth lands.
 const ACCESS_CODE = process.env.INK_ACCESS_CODE || '';
@@ -71,7 +72,7 @@ pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:
 details>summary{cursor:pointer;color:var(--muted);font-size:.875rem;padding:.25rem 0}
 .head{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;flex-wrap:wrap}`;
 
-const NAV = [['/devices', 'Readers'], ['/provider', 'Your AI'], ['/traces', 'Traces']];
+const NAV = [['/devices', 'Readers'], ['/apps', 'Apps'], ['/provider', 'Your AI'], ['/traces', 'Traces']];
 
 const FAVICON = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f6f4f'/%3E%3Crect x='9' y='8' width='14' height='16' rx='2' fill='%23fff'/%3E%3Crect x='12' y='12' width='8' height='1.6' fill='%232f6f4f'/%3E%3Crect x='12' y='16' width='8' height='1.6' fill='%232f6f4f'/%3E%3C/svg%3E";
 
@@ -95,6 +96,9 @@ ${chrome
 const note = (text, bad = false) => `<div class="note${bad ? ' bad' : ''}">${text}</div>`;
 
 const when = (ts) => ts ? new Date(ts * 1000).toLocaleString() : 'never';
+
+// What the editor opens on, so the first thing an owner sees is a working app.
+const STARTER_MANIFEST = "{\n  \"name\": \"Status\",\n  \"icon\": \"info\",\n  \"title\": \"Status\",\n  \"rows\": [\n    {\"kind\": \"kv\", \"label\": \"Reading\", \"value\": {\"src\": \"reading.title\"}},\n    {\"kind\": \"kv\", \"label\": \"Battery\", \"value\": {\"src\": \"device.battery\"}}\n  ]\n}";
 
 export const PRESETS = {
   openrouter: { name: 'OpenRouter', base_url: 'https://openrouter.ai/api/v1', model: 'anthropic/claude-sonnet-5' },
@@ -120,6 +124,11 @@ export function dashboardRoutes(db, { devTokens }) {
     provSet: db.prepare(`INSERT INTO providers (user_id,kind,base_url,api_key,model,updated_at) VALUES (?,?,?,?,?,?)
                          ON CONFLICT(user_id) DO UPDATE SET kind=excluded.kind, base_url=excluded.base_url, api_key=excluded.api_key, model=excluded.model, updated_at=excluded.updated_at`),
     traces: db.prepare(`SELECT t.*, d.name AS device_name FROM turns t JOIN devices d ON d.id = t.device_id WHERE d.user_id = ? ORDER BY t.created_at DESC LIMIT 50`),
+    apps: db.prepare(`SELECT * FROM apps WHERE user_id = ? ORDER BY name`),
+    appGet: db.prepare(`SELECT * FROM apps WHERE id = ? AND user_id = ?`),
+    appInsert: db.prepare(`INSERT INTO apps (id,user_id,name,icon,manifest,updated_at) VALUES (?,?,?,?,?,?)`),
+    appUpdate: db.prepare(`UPDATE apps SET name=?, icon=?, manifest=?, updated_at=? WHERE id=? AND user_id=?`),
+    appDelete: db.prepare(`DELETE FROM apps WHERE id = ? AND user_id = ?`),
   };
 
   const user = (req) => { const sid = cookies(req).ink_session; return sid ? q.sessUser.get(sid) : null; };
@@ -243,6 +252,41 @@ export function dashboardRoutes(db, { devTokens }) {
     'POST /devices/rename': async ({ req, res }) => { const u = requireUser(req, res); if (!u) return; const b = await readBody(req); q.rename.run(String(b.name || '').slice(0, 40) || 'Reader', String(b.id), u.id); res.writeHead(302, { location: '/devices' }); res.end(); },
     'POST /devices/revoke': async ({ req, res }) => { const u = requireUser(req, res); if (!u) return; const b = await readBody(req); q.revoke.run(String(b.id), u.id); res.writeHead(302, { location: '/devices' }); res.end(); },
 
+
+    'GET /apps': async ({ req, res, query }) => {
+      const u = requireUser(req, res); if (!u) return;
+      const editing = query.id ? q.appGet.get(String(query.id), u.id) : null;
+      html(res, 200, appsPage(q.apps.all(u.id), editing));
+    },
+
+    'POST /apps': async ({ req, res }) => {
+      const u = requireUser(req, res); if (!u) return;
+      const b = await readBody(req);
+      const text = String(b.manifest || '');
+      const editingId = String(b.id || '');
+      const editing = editingId ? q.appGet.get(editingId, u.id) : null;
+      const result = validateManifest(text);
+      if (!result.ok) {
+        // The manifest comes back exactly as typed. Losing a screen someone
+        // just wrote because they mistyped one source name is unforgivable.
+        return html(res, 400, appsPage(q.apps.all(u.id), editing, text,
+          note('<strong>Not saved.</strong><ul>' + result.errors.map(e => `<li>${esc(e)}</li>`).join('') + '</ul>', true)));
+      }
+      if (editing) {
+        q.appUpdate.run(result.meta.name, result.meta.icon, text, now(), editing.id, u.id);
+      } else {
+        q.appInsert.run(id(), u.id, result.meta.name, result.meta.icon, text, now());
+      }
+      res.writeHead(302, { location: '/apps' }); res.end();
+    },
+
+    'POST /apps/delete': async ({ req, res }) => {
+      const u = requireUser(req, res); if (!u) return;
+      const b = await readBody(req);
+      q.appDelete.run(String(b.id), u.id);
+      res.writeHead(302, { location: '/apps' }); res.end();
+    },
+
     'GET /provider': async ({ req, res }) => {
       const u = requireUser(req, res); if (!u) return;
       const p = q.provGet.get(u.id) || { kind: 'groq', ...PRESETS.groq, api_key: '' };
@@ -296,6 +340,50 @@ export function dashboardRoutes(db, { devTokens }) {
     },
     'GET /health': async ({ res }) => json(res, 200, { ok: true }),
   };
+
+
+  // The apps page: what is installed, and one editor. Kept on a single screen
+  // because an owner has a handful of these, not a catalogue.
+  function appsPage(apps, editing, draft = null, banner = '') {
+    const value = draft !== null ? draft : (editing ? editing.manifest : STARTER_MANIFEST);
+    return page('Apps', `
+      ${banner}
+      <p class="muted">An app is a JSON manifest. Your readers pick these up and show them in the drawer —
+      no firmware build, nothing to copy onto the card by hand.</p>
+
+      ${apps.length === 0 ? '' : apps.map(a => `<div class="card">
+        <div class="head"><h2>${esc(a.name)}</h2><span class="pill">${esc(a.icon)}</span></div>
+        <div class="meta"><span>updated ${esc(when(a.updated_at))}</span></div>
+        <div class="actions">
+          <a href="/apps?id=${esc(a.id)}">Edit</a>
+          <form method="post" action="/apps/delete" onsubmit="return confirm('Remove ${esc(a.name).replace(/'/g, '')} from your readers?')" style="margin:0">
+            <input type="hidden" name="id" value="${esc(a.id)}"><button class="btn-danger">Remove</button>
+          </form>
+        </div></div>`).join('')}
+
+      <div class="card">
+        <h2>${editing ? `Edit ${esc(editing.name)}` : 'Add an app'}</h2>
+        <form method="post" action="/apps">
+          ${editing ? `<input type="hidden" name="id" value="${esc(editing.id)}">` : ''}
+          <label>Manifest
+            <span class="hint">Up to ${LIMITS.bytes} bytes, ${LIMITS.rows} rows. Checked before it reaches your readers.</span>
+            <textarea name="manifest" rows="14" spellcheck="false"
+              style="width:100%;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;border:1px solid var(--line);border-radius:8px;padding:.7rem;background:var(--card);color:var(--fg);margin-top:.3rem">${esc(value)}</textarea>
+          </label>
+          <div class="actions"><button class="btn">${editing ? 'Save changes' : 'Add app'}</button>
+            ${editing ? '<a href="/apps">Cancel</a>' : ''}</div>
+        </form>
+      </div>
+
+      <details><summary>What a manifest can say</summary>
+        <p>Row kinds: <code>text</code>, <code>kv</code>, <code>rule</code>, <code>logo</code>.
+        A <code>text</code> row that resolves to nothing disappears entirely, which is how an optional row works —
+        there are no conditionals, no loops and no expressions.</p>
+        <p><b>Values</b> are literal text or <code>{"src": "..."}</code>, from:</p>
+        <p>${SOURCES.map(x => `<code>${esc(x)}</code>`).join(' ')}</p>
+        <p><b>Icons</b>: ${ICONS.map(x => `<code>${esc(x)}</code>`).join(' ')}</p>
+      </details>`, { active: '/apps' });
+  }
 
   // Declared after the returned object so the claim handlers can share it.
   function claimPage(code, name = 'My X3', error = '') {

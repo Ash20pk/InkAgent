@@ -2,6 +2,7 @@ import { json, readBody } from '../http.js';
 import { now, id, sha, userCode } from '../db.js';
 import { runAsk, validateAsk, ProviderError } from '../agent.js';
 import { runEngage, validateEngage, APPS as ENGAGE_APPS } from '../engage.js';
+import { sha as hashOf } from '../db.js';
 
 const PAIR_TTL = 600, PAIR_INTERVAL = 5;
 
@@ -14,6 +15,8 @@ export function deviceRoutes(db, { publicUrl, fetchImpl }) {
     deviceByToken: db.prepare(`SELECT * FROM devices WHERE token_hash = ?`),
     touch: db.prepare(`UPDATE devices SET last_seen = ? WHERE id = ?`),
     provider: db.prepare(`SELECT * FROM providers WHERE user_id = ?`),
+    apps: db.prepare(`SELECT id, name, icon, updated_at FROM apps WHERE user_id = ? ORDER BY name`),
+    appManifest: db.prepare(`SELECT manifest FROM apps WHERE id = ? AND user_id = ?`),
     turn: db.prepare(`INSERT INTO turns (sid,device_id,kind,request,full_text,sent_text,truncated,model,latency_ms,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`),
     pendingToken: new Map(), // device_code -> plaintext token, handed out exactly once
   };
@@ -116,6 +119,33 @@ export function deviceRoutes(db, { publicUrl, fetchImpl }) {
                ? 'Your AI key was rejected. Check it on the dashboard.'
                : 'The AI is busy or unreachable. Try again in a moment.' });
       }
+    },
+
+    // The owner's installed apps, in two steps on purpose.
+    //
+    // Without an id this returns the index alone — no manifests. The device
+    // then asks for one manifest at a time. Eight apps at four kilobytes each
+    // would be a 32 KB response, and this reader has under 50 KB of contiguous
+    // heap while TLS is up: a single-shot sync would work on the bench and fail
+    // on a full card. Peak memory here is one manifest.
+    'GET /v1/apps': async ({ req, res, query }) => {
+      const d = auth(req, res); if (!d) return;
+
+      if (query.id) {
+        const row = q.appManifest.get(String(query.id), d.user_id);
+        if (!row) return json(res, 404, { error: 'no_app' });
+        // Served as the manifest itself, so the device can stream it to the
+        // card without parsing a wrapper it would only throw away.
+        const buf = Buffer.from(row.manifest);
+        res.writeHead(200, { 'content-type': 'application/json', 'content-length': buf.length });
+        return res.end(buf);
+      }
+
+      const rows = q.apps.all(d.user_id);
+      // A stamp over the whole set, so a device already holding it writes
+      // nothing. Cheaper than comparing manifests on a device with no spare heap.
+      const version = hashOf(rows.map(a => `${a.id}:${a.updated_at}`).join('|')).slice(0, 16);
+      json(res, 200, { version, apps: rows.map(a => ({ id: a.id, name: a.name, icon: a.icon })) });
     },
 
     'GET /v1/brief/next': async ({ req, res }) => {
