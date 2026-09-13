@@ -36,17 +36,17 @@ function noteFailure(email) {
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const STYLE = `:root{
-  /* The panel resolves four levels and nothing else, so the dashboard uses
-     four: paper, a rule grey, a muted grey, and ink. No colour, because the
-     device has none and a green button here would be describing a machine that
-     cannot show it. */
-  --paper:#f5f3ed; --l2:#cdc9be; --l1:#6d695f; --ink:#17160f;
+  /* The panel resolves four levels of grey and nothing else, so the dashboard
+     uses exactly those four and no colour: white, a rule grey, a muted grey,
+     and black. Warm paper tones were the earlier attempt and they were wrong —
+     the device is black and white, and the site should say so. */
+  --paper:#ffffff; --l2:#b4b4b4; --l1:#6e6e6e; --ink:#000000;
   --gap:1rem;
 }
 /* Night mode on the reader is inverted output polarity, not a different
    palette. Same here: the four levels swap ends. */
 @media (prefers-color-scheme:dark){:root{
-  --paper:#17160f; --l2:#3b382f; --l1:#9d988b; --ink:#f0ede4;
+  --paper:#000000; --l2:#4a4a4a; --l1:#9a9a9a; --ink:#ffffff;
 }}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -57,10 +57,18 @@ body{font:16px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
   background:var(--paper);color:var(--ink);margin:0;padding:0 var(--gap) 4rem}
 .wrap{max-width:40rem;margin:0 auto}
 
-header.top{display:flex;align-items:baseline;gap:.6rem;padding:1.5rem 0 .5rem}
+header.top{display:flex;align-items:center;gap:.6rem;padding:1.5rem 0 .5rem}
+.brand{display:flex;align-items:center;gap:.55rem}
+.mark{width:1.6rem;height:1.6rem;display:block;flex:none;color:var(--ink)}
+/* Signed out there is no nav and nothing else on the page, so the mark carries
+   it: the same thing the reader shows while it wakes up. */
+header.top.solo{flex-direction:column;gap:.75rem;padding:3rem 0 1rem}
+header.top.solo .brand{flex-direction:column;gap:.7rem}
+header.top.solo .mark{width:5.5rem;height:5.5rem}
+header.top.solo .word{font-size:1.3rem}
 .brand{font-family:ui-serif,Georgia,"Times New Roman",serif;font-size:1.05rem;
   letter-spacing:.01em;text-decoration:none;color:var(--ink)}
-.brand span{color:var(--l1)}
+.brand .word span{color:var(--l1)}
 
 /* Selection is an underline, as it is on the reader: a rule under the label
    rather than an inverted band. */
@@ -167,7 +175,16 @@ details>summary{cursor:pointer;color:var(--l1);font-size:.875rem;padding:.45rem 
 
 const NAV = [['/devices', 'Readers'], ['/apps', 'Apps'], ['/provider', 'Your AI'], ['/account', 'Account']];
 
-const FAVICON = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23f5f3ed'/%3E%3Crect x='6' y='5' width='20' height='22' fill='none' stroke='%2317160f' stroke-width='2'/%3E%3Crect x='10' y='11' width='12' height='2' fill='%2317160f'/%3E%3Crect x='10' y='16' width='12' height='2' fill='%2317160f'/%3E%3Crect x='10' y='21' width='7' height='2' fill='%2317160f'/%3E%3C/svg%3E";
+// The mark the reader itself draws on boot, on the sleep screen and in About,
+// traced from firmware/src/images/Logo120.h so the two are the same shape and
+// not two drawings of the same idea. One bit per pixel there, one rectangle per
+// run here; `crispEdges` keeps the pixel grid visible instead of smoothing it
+// into something the panel could not render.
+const MARK = `<svg class="mark" viewBox="0 0 120 120" fill="currentColor" shape-rendering="crispEdges" aria-hidden="true"><path d="M0 0h3v1h-3z"/><path d="M4 0h2v1h-2z"/><path d="M7 0h1v1h-1z"/><path d="M25 6h1v28h-1z"/><path d="M24 9h1v22h-1z"/><path d="M26 9h1v23h-1z"/><path d="M23 13h1v15h-1z"/><path d="M27 13h1v14h-1z"/><path d="M22 16h1v8h-1z"/><path d="M20 17h2v6h-2z"/><path d="M28 17h3v6h-3z"/><path d="M15 18h5v3h-5z"/><path d="M31 18h4v4h-4z"/><path d="M11 19h4v1h-4z"/><path d="M35 19h5v1h-5z"/><path d="M12 20h3v1h-3z"/><path d="M35 20h4v1h-4z"/><path d="M16 21h4v1h-4z"/><path d="M19 22h1v1h-1z"/><path d="M86 22h1v40h-1z"/><path d="M88 22h5v40h-5z"/><path d="M94 22h1v41h-1z"/><path d="M28 23h1v1h-1z"/><path d="M82 23h4v39h-4z"/><path d="M87 23h1v39h-1z"/><path d="M93 23h1v40h-1z"/><path d="M95 23h4v41h-4z"/><path d="M79 24h3v39h-3z"/><path d="M99 24h4v42h-4z"/><path d="M76 25h3v40h-3z"/><path d="M103 25h2v69h-2z"/><path d="M74 26h2v41h-2z"/><path d="M105 26h2v67h-2z"/><path d="M73 27h1v43h-1z"/><path d="M107 27h1v66h-1z"/><path d="M71 28h2v63h-2z"/><path d="M108 28h2v64h-2z"/><path d="M70 29h1v62h-1z"/><path d="M110 29h1v62h-1z"/><path d="M68 30h2v59h-2z"/><path d="M111 30h2v59h-2z"/><path d="M66 31h2v58h-2z"/><path d="M64 32h2v55h-2z"/><path d="M113 32h2v56h-2z"/><path d="M62 33h2v53h-2z"/><path d="M61 34h1v52h-1z"/><path d="M115 34h2v51h-2z"/><path d="M58 35h3v49h-3z"/><path d="M57 36h1v48h-1z"/><path d="M117 36h1v48h-1z"/><path d="M55 37h2v46h-2z"/><path d="M118 37h1v46h-1z"/><path d="M53 38h2v43h-2z"/><path d="M51 39h2v42h-2z"/><path d="M119 39h1v42h-1z"/><path d="M49 40h2v39h-2z"/><path d="M0 41h1v40h-1z"/><path d="M47 41h2v37h-2z"/><path d="M46 42h1v36h-1z"/><path d="M1 43h1v36h-1z"/><path d="M43 43h3v33h-3z"/><path d="M42 44h1v32h-1z"/><path d="M2 45h1v31h-1z"/><path d="M40 45h2v30h-2z"/><path d="M38 46h2v27h-2z"/><path d="M36 47h2v26h-2z"/><path d="M3 48h1v26h-1z"/><path d="M34 48h2v23h-2z"/><path d="M32 49h2v21h-2z"/><path d="M4 50h1v1h-1z"/><path d="M31 50h1v20h-1z"/><path d="M28 51h3v17h-3z"/><path d="M4 52h1v19h-1z"/><path d="M27 52h1v16h-1z"/><path d="M25 53h2v14h-2z"/><path d="M23 54h2v11h-2z"/><path d="M21 55h2v10h-2z"/><path d="M19 56h2v7h-2z"/><path d="M5 57h1v1h-1z"/><path d="M17 57h2v5h-2z"/><path d="M16 58h1v4h-1z"/><path d="M5 59h1v2h-1z"/><path d="M13 59h3v1h-3z"/><path d="M14 60h2v1h-2z"/><path d="M5 62h1v2h-1z"/><path d="M18 62h1v1h-1z"/><path d="M82 62h2v1h-2z"/><path d="M85 62h1v1h-1z"/><path d="M90 62h1v1h-1z"/><path d="M92 62h1v1h-1z"/><path d="M20 63h1v1h-1z"/><path d="M79 63h2v1h-2z"/><path d="M97 64h2v1h-2z"/><path d="M5 65h1v1h-1z"/><path d="M24 65h1v1h-1z"/><path d="M76 65h1v1h-1z"/><path d="M100 66h3v1h-3z"/><path d="M74 67h1v1h-1z"/><path d="M101 67h2v1h-2z"/><path d="M29 68h2v1h-2z"/><path d="M102 68h1v2h-1z"/><path d="M33 70h1v1h-1z"/><path d="M35 71h1v1h-1z"/><path d="M39 73h1v1h-1z"/><path d="M73 75h1v18h-1z"/><path d="M102 75h1v20h-1z"/><path d="M44 76h2v1h-2z"/><path d="M74 77h1v16h-1z"/><path d="M101 77h1v19h-1z"/><path d="M48 78h1v1h-1z"/><path d="M75 78h1v16h-1z"/><path d="M100 78h1v18h-1z"/><path d="M50 79h1v1h-1z"/><path d="M76 79h1v15h-1z"/><path d="M99 79h1v17h-1z"/><path d="M77 80h2v15h-2z"/><path d="M97 80h2v17h-2z"/><path d="M54 81h1v1h-1z"/><path d="M79 81h2v15h-2z"/><path d="M95 81h2v16h-2z"/><path d="M81 82h5v14h-5z"/><path d="M87 82h1v15h-1z"/><path d="M89 82h1v15h-1z"/><path d="M91 82h4v15h-4z"/><path d="M86 83h1v14h-1z"/><path d="M88 83h1v15h-1z"/><path d="M90 83h1v15h-1z"/><path d="M59 84h2v1h-2z"/><path d="M115 85h1v1h-1z"/><path d="M63 86h1v1h-1z"/><path d="M65 87h1v1h-1z"/><path d="M69 89h1v1h-1z"/><path d="M111 89h1v1h-1z"/><path d="M72 91h1v1h-1z"/><path d="M105 93h1v1h-1z"/><path d="M103 94h1v1h-1z"/><path d="M82 96h4v1h-4z"/><path d="M92 97h1v1h-1z"/></svg>`;
+
+const FAVICON = 'data:image/svg+xml,' + encodeURIComponent(
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" shape-rendering="crispEdges">${MARK.replace(/<svg[^>]*>|<\/svg>/g, '')}</svg>`
+).replace(/'/g, '%27');
 
 // A signed-out page gets no nav: tabs you cannot use are noise.
 //
@@ -182,7 +199,7 @@ const page = (title, body, { active = '', chrome = true, lead = '', flash = '' }
 <title>${esc(title)} · InkAgent</title>
 <style>${STYLE}</style>
 <div class="wrap">
-<header class="top"><a class="brand" href="/devices">InkAgent <span>relay</span></a></header>
+<header class="top${chrome ? '' : ' solo'}"><a class="brand" href="/devices">${MARK}<span class="word">InkAgent <span>relay</span></span></a></header>
 ${chrome
     ? `<nav>${NAV.map(([href, label]) => `<a href="${href}"${active === href ? ' aria-current="page"' : ''}>${label}</a>`).join('')}<span class="spacer"></span><a href="/logout">Sign out</a></nav>`
     : '<div style="height:1.25rem"></div>'}
