@@ -33,7 +33,7 @@ test('poll is pending until the browser claims, then hands out the token exactly
 
   const claim = await R.form(cookie, '/claim', { code: start.json.user_code.toLowerCase(), name: 'Bedside' });
   assert.equal(claim.status, 200);
-  assert.match(claim.text, /connect your AI/, 'first-run nudge to add a provider');
+  assert.match(claim.text, /connect your ai/i, 'first-run nudge to add a provider');
 
   const p2 = await R.api('POST', '/v1/pair/poll', { device_code: start.json.device_code });
   assert.equal(p2.json.status, 'ok');
