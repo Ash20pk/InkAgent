@@ -14,15 +14,12 @@ namespace {
 constexpr int LOGO_SIZE = 120;
 }  // namespace
 
-void renderScreen(GfxRenderer& renderer, MappedInputManager& mappedInput, const Screen& screen) {
+int drawScreenBody(GfxRenderer& renderer, const Screen& screen, const int startY) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int pageWidth = renderer.getScreenWidth();
   const int labelX = metrics.contentSidePadding;
 
-  renderer.clearScreen();
-  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, screen.title);
-
-  int y = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+  int y = startY;
 
   for (uint8_t i = 0; i < screen.rowCount; i++) {
     const Row& row = screen.rows[i];
@@ -66,6 +63,43 @@ void renderScreen(GfxRenderer& renderer, MappedInputManager& mappedInput, const 
       }
     }
   }
+
+  return y;
+}
+
+int measureScreenBody(const GfxRenderer& renderer, const Screen& screen) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  int height = 0;
+  for (uint8_t i = 0; i < screen.rowCount; i++) {
+    const Row& row = screen.rows[i];
+    const int gap = metrics.verticalSpacing * row.gapAfter;
+    switch (row.kind) {
+      case RowKind::Logo:
+        height += LOGO_SIZE + gap;
+        break;
+      case RowKind::Text:
+        height += renderer.getLineHeight(UI_12_FONT_ID) + gap;
+        break;
+      case RowKind::Rule:
+        height += 1 + gap;
+        break;
+      case RowKind::Kv:
+        // Label line plus a single value line; a wrapped value only grows this.
+        height += renderer.getLineHeight(UI_10_FONT_ID) + renderer.getLineHeight(UI_12_FONT_ID) + gap;
+        break;
+    }
+  }
+  return height;
+}
+
+void renderScreen(GfxRenderer& renderer, MappedInputManager& mappedInput, const Screen& screen) {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int pageWidth = renderer.getScreenWidth();
+
+  renderer.clearScreen();
+  GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, screen.title);
+
+  drawScreenBody(renderer, screen, metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing);
 
   const auto labels = mappedInput.mapLabels(tr(STR_BACK), "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

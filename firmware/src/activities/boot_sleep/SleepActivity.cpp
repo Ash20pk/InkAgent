@@ -30,6 +30,8 @@
 #include "Xtc/XthImage.h"
 #include "activities/reader/ReaderUtils.h"
 #include "components/UITheme.h"
+#include "engage/Manifest.h"
+#include "engage/ScreenRenderer.h"
 #include "fontIds.h"
 #include "images/Logo120.h"
 #include "images/MoonIcon.h"
@@ -550,6 +552,8 @@ void SleepActivity::onEnter() {
       return renderLockSleepScreen();
     case (InkAgentSettings::SLEEP_SCREEN_MODE::BLANK):
       return renderBlankSleepScreen();
+    case (InkAgentSettings::SLEEP_SCREEN_MODE::CANVAS):
+      return renderCanvasSleepScreen();
     case (InkAgentSettings::SLEEP_SCREEN_MODE::CUSTOM):
       return renderCustomSleepScreen();
     case (InkAgentSettings::SLEEP_SCREEN_MODE::COVER):
@@ -1063,6 +1067,37 @@ void SleepActivity::renderLastScreenSleepScreen() const {
   } else {
     renderer.displayBuffer(HalDisplay::HALF_REFRESH);
   }
+}
+
+void SleepActivity::renderCanvasSleepScreen() const {
+  // The e-ink asset this device has and nothing else does: an image that costs
+  // nothing to hold. So the sleep screen carries reading state rather than a
+  // wallpaper. Every binding is a local source; nothing here touches the network.
+  static constexpr char kSleepManifest[] = R"JSON({
+    "rows": [
+      {"kind": "logo", "gapAfter": 2},
+      {"kind": "text", "text": {"src": "reading.title"},   "bold": true, "center": true},
+      {"kind": "text", "text": {"src": "reading.author"},  "center": true, "gapAfter": 2},
+      {"kind": "text", "text": {"src": "reading.percent"}, "center": true},
+      {"kind": "text", "text": {"src": "device.clock"},    "center": true}
+    ]
+  })JSON";
+
+  auto screen = makeUniqueNoThrow<engage::Screen>();
+  if (!screen || !engage::parseScreen(kSleepManifest, strlen(kSleepManifest), renderer, *screen)) {
+    LOG_ERR("SLEEP", "canvas manifest unavailable, falling back");
+    return renderDefaultSleepScreen();
+  }
+
+  renderer.clearScreen();
+  const int bodyHeight = engage::measureScreenBody(renderer, *screen);
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int startY = std::max(metrics.topPadding, (renderer.getScreenHeight() - bodyHeight) / 2);
+  engage::drawScreenBody(renderer, *screen, startY);
+
+  // Half refresh, like every other sleep screen: this is the last paint before
+  // the panel holds it unpowered, so a clean frame matters more than speed.
+  renderer.displayBuffer(HalDisplay::HALF_REFRESH);
 }
 
 void SleepActivity::renderBlankSleepScreen() const {

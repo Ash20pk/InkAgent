@@ -27,6 +27,7 @@ class InkAgentSettings : public PersistableStore<InkAgentSettings> {
     QUICK_RESUME = 6,
     TRANSPARENT_CUSTOM = 7,
     LOCK = 8,
+    CANVAS = 9,
     SLEEP_SCREEN_MODE_COUNT
   };
   enum SLEEP_SCREEN_COVER_MODE { FIT = 0, CROP = 1, SLEEP_SCREEN_COVER_MODE_COUNT };
