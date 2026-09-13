@@ -1,15 +1,17 @@
 #include "InkAgentClient.h"
 
 #include <Arduino.h>
+#include <HalStorage.h>
 #include <InkAgentStore.h>
 #include <Logging.h>
 #include <SecureClient.h>
 #include <SecureHttpClient.h>
-#include <esp_mac.h>
-#include <HalStorage.h>
 #include <WiFi.h>
+#include <esp_mac.h>
 
 #include <string>
+
+#include "RelayCa.h"
 
 int InkAgentClient::lastHttpCode = 0;
 
@@ -28,7 +30,13 @@ void commonHeaders(freeink::SecureHttpClient& http, bool withToken) {
 // and leaves the response body in `out` (bounded by SecureHttpClient).
 int post(const char* path, const char* body, size_t len, bool withToken, std::string& out) {
   freeink::SecureHttpClient http;
-  http.setInsecure();  // TODO(release): pin the relay's CA once the relay has a stable cert
+#if INKAGENT_RELAY_INSECURE
+  // Escape hatch for pointing a dev build at a relay with a self-signed cert.
+  // Never set in a shipped build.
+  http.setInsecure();
+#else
+  http.setCACert(inkagent::kRelayRootCAs);
+#endif
   http.setTimeout(kTimeoutMs);
   const std::string url = INKAGENT_STORE.getRelayUrl() + path;
   char heap[48];
@@ -82,8 +90,8 @@ bool InkAgentClient::heapAllowsTls() {
 }
 
 void InkAgentClient::heapSummary(char* out, size_t cap) {
-  snprintf(out, cap, "heap %uk/%uk wifi %d", (unsigned)(ESP.getFreeHeap() / 1024), (unsigned)(ESP.getMaxAllocHeap() / 1024),
-           (int)WiFi.status());
+  snprintf(out, cap, "heap %uk/%uk wifi %d", (unsigned)(ESP.getFreeHeap() / 1024),
+           (unsigned)(ESP.getMaxAllocHeap() / 1024), (int)WiFi.status());
 }
 
 void InkAgentClient::sdLog(const char* line) {
