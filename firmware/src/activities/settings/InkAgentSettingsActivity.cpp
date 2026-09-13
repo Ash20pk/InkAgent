@@ -7,16 +7,17 @@
 #include <memory>
 #include <string>
 
-#include "MappedInputManager.h"
 #include "InkAgentPairActivity.h"
+#include "MappedInputManager.h"
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
+#include "network/InkAgentClient.h"
 
 namespace fui = freeink::ui;
 
 namespace {
 const StrId menuNames[InkAgentSettingsActivity::MENU_ITEMS] = {StrId::STR_ASK_RELAY_URL, StrId::STR_ASK_PAIRING,
-                                                               StrId::STR_ASK_RESET_RELAY};
+                                                               StrId::STR_SYNC_APPS, StrId::STR_ASK_RESET_RELAY};
 }  // namespace
 
 InkAgentSettingsActivity::InkAgentSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
@@ -59,11 +60,50 @@ void InkAgentSettingsActivity::activateIndex(const int index) {
                              [this](const ActivityResult&) { requestUpdate(); });
     }
   } else if (index == 2) {
+    syncApps();
+  } else if (index == 3) {
     INKAGENT_STORE.setRelayUrl("");
     INKAGENT_STORE.clearPairing();
     INKAGENT_STORE.saveToFile();
     requestUpdate();
   }
+}
+
+void InkAgentSettingsActivity::syncApps() {
+  if (!INKAGENT_STORE.isPaired()) {
+    syncStatus_ = tr(STR_ASK_NOT_PAIRED);
+    requestUpdate();
+    return;
+  }
+  if (!InkAgentClient::heapAllowsTls()) {
+    // Said plainly rather than attempted and failed inside TLS, where the only
+    // evidence would be a line in the SD log.
+    syncStatus_ = tr(STR_SYNC_APPS_NO_MEMORY);
+    requestUpdate();
+    return;
+  }
+
+  // Paint "syncing" before blocking: this holds the task for as long as the
+  // relay takes, and a frozen screen with no explanation is the worst version
+  // of a slow network.
+  syncStatus_ = tr(STR_SYNC_APPS_WORKING);
+  requestUpdateAndWait();
+
+  const auto r = InkAgentClient::syncApps();
+  char buf[64];
+  if (r.revoked) {
+    INKAGENT_STORE.clearPairing();
+    INKAGENT_STORE.saveToFile();
+    syncStatus_ = tr(STR_ASK_NOT_PAIRED);
+  } else if (r.unchanged) {
+    syncStatus_ = tr(STR_SYNC_APPS_UNCHANGED);
+  } else if (r.ok) {
+    snprintf(buf, sizeof(buf), "%d %s", r.written, tr(STR_SYNC_APPS_INSTALLED));
+    syncStatus_ = buf;
+  } else {
+    syncStatus_ = tr(STR_SYNC_APPS_FAILED);
+  }
+  requestUpdate();
 }
 
 void InkAgentSettingsActivity::buildScreen(UiScreen& screen) {
@@ -82,9 +122,11 @@ void InkAgentSettingsActivity::buildScreen(UiScreen& screen) {
                       ? (INKAGENT_STORE.getOwner().empty() ? tr(STR_ASK_PAIRED) : INKAGENT_STORE.getOwner())
                       : tr(STR_ASK_NOT_PAIRED);
   rowItems_[1].label = INKAGENT_STORE.isPaired() ? tr(STR_ASK_UNPAIR) : tr(STR_ASK_PAIR_NOW);
-  rowValues_[2] = INKAGENT_DEFAULT_RELAY;
-  const auto defSchemeEnd = rowValues_[2].find("://");
-  if (defSchemeEnd != std::string::npos) rowValues_[2].erase(0, defSchemeEnd + 3);
+  // Row 2: apps from the relay, with whatever the last sync reported.
+  rowValues_[2] = syncStatus_;
+  rowValues_[3] = INKAGENT_DEFAULT_RELAY;
+  const auto defSchemeEnd = rowValues_[3].find("://");
+  if (defSchemeEnd != std::string::npos) rowValues_[3].erase(0, defSchemeEnd + 3);
 
   for (int i = 0; i < MENU_ITEMS; i++) rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
 

@@ -1,6 +1,7 @@
 #include "InkAgentClient.h"
 
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include <HalStorage.h>
 #include <InkAgentStore.h>
 #include <Logging.h>
@@ -10,8 +11,10 @@
 #include <esp_mac.h>
 
 #include <string>
+#include <vector>
 
 #include "RelayCa.h"
+#include "engage/AppCatalog.h"
 
 int InkAgentClient::lastHttpCode = 0;
 
@@ -26,9 +29,9 @@ void commonHeaders(freeink::SecureHttpClient& http, bool withToken) {
   if (withToken) http.addHeader("X-Ink-Device", INKAGENT_STORE.getDeviceToken());
 }
 
-// POSTs `body` to relay + path. Returns HTTP status (<=0 on transport error)
+// Sends `method` to relay + path. Returns HTTP status (<=0 on transport error)
 // and leaves the response body in `out` (bounded by SecureHttpClient).
-int post(const char* path, const char* body, size_t len, bool withToken, std::string& out) {
+int request(const char* method, const char* path, const char* body, size_t len, bool withToken, std::string& out) {
   freeink::SecureHttpClient http;
 #if INKAGENT_RELAY_INSECURE
   // Escape hatch for pointing a dev build at a relay with a self-signed cert.
@@ -55,7 +58,7 @@ int post(const char* path, const char* body, size_t len, bool withToken, std::st
              (unsigned)(ESP.getMaxAllocHeap() / 1024));
     InkAgentClient::sdLog(pre);
   }
-  int code = http.sendRequest("POST", reinterpret_cast<const uint8_t*>(body), len);
+  int code = http.sendRequest(method, reinterpret_cast<const uint8_t*>(body), len);
   if (code <= 0) {
     // One retry: the first TLS handshake after Wi-Fi comes up fails now and then.
     InkAgentClient::heapSummary(heap, sizeof(heap));
@@ -64,7 +67,7 @@ int post(const char* path, const char* body, size_t len, bool withToken, std::st
     delay(800);
     if (http.begin(url)) {
       commonHeaders(http, withToken);
-      code = http.sendRequest("POST", reinterpret_cast<const uint8_t*>(body), len);
+      code = http.sendRequest(method, reinterpret_cast<const uint8_t*>(body), len);
     }
   }
   out = http.getString();
@@ -82,6 +85,10 @@ int post(const char* path, const char* body, size_t len, bool withToken, std::st
     if (code <= 0) InkAgentClient::sdLog(det);
   }
   return code;
+}
+
+int post(const char* path, const char* body, size_t len, bool withToken, std::string& out) {
+  return request("POST", path, body, len, withToken, out);
 }
 }  // namespace
 
@@ -216,5 +223,129 @@ InkAgentClient::EngageResult InkAgentClient::engage(const inkagent::EngageReques
   }
 
   out.ok = true;
+  return out;
+}
+
+namespace {
+
+// Relay-managed manifests are named so a sync can replace its own files without
+// touching anything the owner copied onto the card by hand.
+constexpr const char* kRelayAppPrefix = "relay-";
+
+std::string relayAppPath(const char* id) {
+  return std::string(engage::kAppsFolder) + "/" + kRelayAppPrefix + id + ".json";
+}
+
+// Removes every manifest a previous sync wrote. Hand-placed apps are left
+// alone: the owner put them there, and the relay does not own them.
+void clearRelayApps() {
+  auto dir = Storage.open(engage::kAppsFolder);
+  if (!dir || !dir.isDirectory()) return;
+  char name[128];
+  std::vector<std::string> doomed;
+  dir.rewindDirectory();
+  for (auto f = dir.openNextFile(); f; f = dir.openNextFile()) {
+    f.getName(name, sizeof(name));
+    if (!f.isDirectory() && strncmp(name, kRelayAppPrefix, strlen(kRelayAppPrefix)) == 0) {
+      doomed.emplace_back(std::string(engage::kAppsFolder) + "/" + name);
+    }
+  }
+  dir.close();
+  // Deleted after the directory handle is closed: removing entries while
+  // walking them is how a directory iterator loses its place.
+  for (const auto& path : doomed) Storage.remove(path.c_str());
+}
+
+bool writeManifest(const std::string& path, const std::string& body) {
+  HalFile f;
+  if (!Storage.openFileForWrite("INKA", path.c_str(), f)) return false;
+  const bool ok = f.write(reinterpret_cast<const uint8_t*>(body.data()), body.size()) == static_cast<int>(body.size());
+  f.close();
+  if (!ok) Storage.remove(path.c_str());
+  return ok;
+}
+
+std::string readSyncedVersion() {
+  HalFile f;
+  if (!Storage.openFileForRead("INKA", InkAgentClient::APPS_VERSION_FILE, f)) return {};
+  char buf[32] = {0};
+  const int n = f.read(reinterpret_cast<uint8_t*>(buf), sizeof(buf) - 1);
+  f.close();
+  return n > 0 ? std::string(buf, static_cast<size_t>(n)) : std::string{};
+}
+
+}  // namespace
+
+InkAgentClient::SyncResult InkAgentClient::syncApps() {
+  SyncResult out;
+
+  std::string indexBody;
+  const int code = request("GET", "/v1/apps", nullptr, 0, true, indexBody);
+  if (code == 401) {
+    out.revoked = true;
+    return out;
+  }
+  if (code < 200 || code >= 300) return out;
+
+  char version[24] = {0};
+  inkagent::jsonGetString(indexBody.c_str(), indexBody.size(), "version", version, sizeof(version));
+  if (version[0] != '\0' && readSyncedVersion() == version) {
+    out.ok = true;
+    out.unchanged = true;
+    return out;
+  }
+
+  // The index is small by design, so parsing it whole is affordable. The
+  // manifests are not, and are never held together with it.
+  std::vector<std::string> ids;
+  {
+    JsonDocument filter;
+    filter["apps"][0]["id"] = true;
+    JsonDocument doc;
+    if (deserializeJson(doc, indexBody, DeserializationOption::Filter(filter))) {
+      LOG_ERR("INKA", "apps index did not parse");
+      return out;
+    }
+    for (JsonVariantConst a : doc["apps"].as<JsonArrayConst>()) {
+      const char* appId = a["id"].as<const char*>();
+      if (appId && appId[0] != '\0' && ids.size() < engage::kMaxCatalogApps) ids.emplace_back(appId);
+    }
+  }
+  indexBody.clear();
+  indexBody.shrink_to_fit();
+
+  if (!Storage.exists(engage::kAppsFolder) && !Storage.mkdir(engage::kAppsFolder)) {
+    LOG_ERR("INKA", "cannot create %s", engage::kAppsFolder);
+    return out;
+  }
+  clearRelayApps();
+
+  for (const auto& appId : ids) {
+    std::string body;
+    const std::string path = std::string("/v1/apps?id=") + appId;
+    const int one = request("GET", path.c_str(), nullptr, 0, true, body);
+    if (one < 200 || one >= 300 || body.empty() || body.size() > engage::kMaxManifestBytes) {
+      LOG_ERR("INKA", "app %s: http %d, %u bytes", appId.c_str(), one, static_cast<unsigned>(body.size()));
+      out.failed++;
+      continue;
+    }
+    if (writeManifest(relayAppPath(appId.c_str()), body)) {
+      out.written++;
+    } else {
+      out.failed++;
+    }
+    // body dies here, before the next fetch: one manifest resident at a time.
+  }
+
+  // The version is only recorded when everything landed. A partial sync must
+  // retry next time rather than believing it is up to date.
+  if (out.failed == 0 && version[0] != '\0') {
+    HalFile f;
+    if (Storage.openFileForWrite("INKA", APPS_VERSION_FILE, f)) {
+      f.write(reinterpret_cast<const uint8_t*>(version), strlen(version));
+      f.close();
+    }
+  }
+  out.ok = out.failed == 0;
   return out;
 }

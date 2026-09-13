@@ -44,6 +44,23 @@ class InkAgentClient {
   // Where the sleep canvas looks for the last screen the agent composed.
   static constexpr const char* ENGAGE_CACHE = "/.inkagent/engage.json";
 
+  // Outcome of syncing the owner's apps from the relay onto the card.
+  struct SyncResult {
+    bool ok = false;
+    bool revoked = false;
+    bool unchanged = false;  // the relay's set matches what is already here
+    int written = 0;
+    int failed = 0;
+  };
+
+  // Fetches the owner's app index, then each manifest in turn, writing them
+  // into /Apps. One manifest is held at a time: the whole set at once would not
+  // fit beside a TLS session on this device.
+  static SyncResult syncApps();
+
+  // Where the last synced set's version stamp is remembered.
+  static constexpr const char* APPS_VERSION_FILE = "/.inkagent/apps_version";
+
   static int lastHttpCode;
   static void hardwareId(char out[13]);
 };
