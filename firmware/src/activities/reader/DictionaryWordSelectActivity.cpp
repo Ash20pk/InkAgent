@@ -10,8 +10,11 @@
 #include <climits>
 #include <cstdlib>
 
-#include "InkAgentSettings.h"
 #include "DictionaryDefinitionActivity.h"
+#include "InkAgentSettings.h"
+#include "InkAgentState.h"
+#include "RecentBooksStore.h"
+#include "WordListStore.h"
 #include "components/UITheme.h"
 
 namespace {
@@ -179,6 +182,19 @@ void DictionaryWordSelectActivity::performLookup() {
 
   if (found) {
     popup = Popup::None;
+    // A lookup is the reader telling us this word did not land. Keep it, with
+    // the book it was met in, so it can be retrieved later instead of met once
+    // and forgotten.
+    {
+      std::string book;
+      for (const auto& b : RECENT_BOOKS.getBooks()) {
+        if (b.path == APP_STATE.openEpubPath) {
+          book = b.title;
+          break;
+        }
+      }
+      WORD_LIST.add(headword, book);
+    }
     startActivityForResult(
         std::make_unique<DictionaryDefinitionActivity>(renderer, mappedInput, std::move(headword),
                                                        std::move(definition), dict.definitionsAreHtml()),

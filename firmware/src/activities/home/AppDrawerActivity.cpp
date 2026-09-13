@@ -9,20 +9,21 @@
 #include "activities/browser/OpdsBookBrowserActivity.h"
 #include "activities/home/FileBrowserActivity.h"
 #include "activities/home/RecentBooksActivity.h"
+#include "activities/network/CalibreConnectActivity.h"
 #include "activities/network/InkAgentWebServerActivity.h"
+#include "activities/network/UsbDriveActivity.h"
+#include "activities/network/WifiSelectionActivity.h"
+#include "activities/settings/AboutActivity.h"
+#include "activities/settings/FontDownloadActivity.h"
 #include "activities/settings/OpdsServerListActivity.h"
+#include "activities/settings/OtaUpdateActivity.h"
 #include "activities/settings/SettingsActivity.h"
+#include "activities/util/FrontlightPanelActivity.h"
+#include "activities/words/WordListActivity.h"
 #include "components/UITheme.h"
 #include "components/icons/drawerIcons.h"
 #include "components/icons/listIcons.h"
 #include "fontIds.h"
-#include "activities/settings/AboutActivity.h"
-#include "activities/network/WifiSelectionActivity.h"
-#include "activities/network/CalibreConnectActivity.h"
-#include "activities/network/UsbDriveActivity.h"
-#include "activities/settings/FontDownloadActivity.h"
-#include "activities/settings/OtaUpdateActivity.h"
-#include "activities/util/FrontlightPanelActivity.h"
 
 namespace {
 constexpr int ICON_SIZE = 32;
@@ -62,6 +63,8 @@ const freeink::Icon& iconFor(const int index, const StrId label) {
       return icon_wifi_32;
     case StrId::STR_FRONTLIGHT:
       return icon_sun_32;
+    case StrId::STR_WORD_LIST:
+      return icon_words_32;
     case StrId::STR_USB_DRIVE:
       return icon_usb_32;
     case StrId::STR_CALIBRE_WIRELESS:
@@ -87,6 +90,7 @@ void AppDrawerActivity::onEnter() {
   entries = {
       {Target::FILE_BROWSER, StrId::STR_BROWSE_FILES},
       {Target::RECENTS, StrId::STR_MENU_RECENT_BOOKS},
+      {Target::WORD_LIST, StrId::STR_WORD_LIST},
   };
   if (OPDS_STORE.hasServers()) entries.push_back({Target::OPDS_BROWSER, StrId::STR_OPDS_BROWSER});
   entries.push_back({Target::FILE_TRANSFER, StrId::STR_FILE_TRANSFER});
@@ -163,8 +167,7 @@ void AppDrawerActivity::render(RenderLock&&) {
                                     : iconFor(static_cast<int>(i), entries[i].label);
     blitIcon(renderer, icon, tileX + (grid.tileWidth - ICON_SIZE) / 2, tileY + metrics.verticalSpacing);
 
-    const char* label =
-        entries[i].app != nullptr ? entries[i].app->name : I18n::getInstance().get(entries[i].label);
+    const char* label = entries[i].app != nullptr ? entries[i].app->name : I18n::getInstance().get(entries[i].label);
     const int labelY = tileY + metrics.verticalSpacing + ICON_SIZE + metrics.verticalSpacing;
     UITheme::drawCenteredText(renderer, Rect{tileX, labelY, grid.tileWidth, renderer.getLineHeight(UI_10_FONT_ID)},
                               UI_10_FONT_ID, labelY, label);
@@ -251,6 +254,9 @@ void AppDrawerActivity::activate(const Target target) {
       break;
     case Target::RECENTS:
       push(makeUniqueNoThrow<RecentBooksActivity>(renderer, mappedInput), "Recents");
+      break;
+    case Target::WORD_LIST:
+      push(makeUniqueNoThrow<WordListActivity>(renderer, mappedInput), "Word List");
       break;
     case Target::OPDS_BROWSER: {
       // Mirrors goToBrowser(): a single configured server skips the picker.

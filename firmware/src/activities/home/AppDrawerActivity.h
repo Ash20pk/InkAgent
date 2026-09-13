@@ -24,6 +24,7 @@ class AppDrawerActivity : public Activity {
   enum class Target {
     FILE_BROWSER,
     RECENTS,
+    WORD_LIST,
     OPDS_BROWSER,
     FILE_TRANSFER,
     WIFI,
@@ -52,7 +53,6 @@ class AppDrawerActivity : public Activity {
   ButtonNavigator buttonNavigator;
   std::vector<Entry> entries;
   int selectedIndex = 0;
-
 
   void activate(Target target);
   // Stacks `activity` on the drawer so its Back returns here. Null (a failed
