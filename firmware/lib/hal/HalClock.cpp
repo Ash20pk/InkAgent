@@ -90,24 +90,49 @@ bool HalClock::formatTime(char* buf, size_t bufSize, uint8_t utcOffsetQuarterHou
 }
 
 bool HalClock::syncFromNTP() {
-  if (!_available) return false;
+  _lastSyncError = "";
+  if (!_available) {
+    _lastSyncError = "no RTC on this board";
+    return false;
+  }
 
   if (WiFi.status() != WL_CONNECTED) {
     LOG_ERR("CLK", "WiFi not connected, cannot sync NTP");
+    _lastSyncError = "Wi-Fi not connected";
     return false;
   }
 
   LOG_INF("CLK", "Starting NTP sync...");
-  configTzTime("UTC0", "pool.ntp.org", "time.nist.gov");
+  // Stop first so a second attempt actually re-queries. configTzTime on an
+  // already-running SNTP client can leave the previous state in place, which
+  // makes a retry look like an instant repeat of the same failure.
+  esp_sntp_stop();
+  configTzTime("UTC0", "pool.ntp.org", "time.google.com", "time.cloudflare.com");
 
-  // Wait for SNTP sync to complete (up to 5 seconds)
-  constexpr int maxAttempts = 50;
+  // Twenty seconds, not five. A first sync pays for DNS on top of the UDP round
+  // trip, and five seconds is inside the range where a working network simply
+  // has not answered yet.
+  constexpr int maxAttempts = 200;
+  constexpr int kPlausibleYear = 2024;
+
   for (int i = 0; i < maxAttempts; i++) {
-    if (sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED) {
-      time_t now = time(nullptr);
-      struct tm timeinfo;
-      gmtime_r(&now, &timeinfo);
+    const bool statusComplete = sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED;
 
+    // Trust a plausible system clock even when the status has not flipped:
+    // smooth sync modes adjust gradually and may never report COMPLETED, and
+    // what matters is having a date, not how it was reached.
+    const time_t now = time(nullptr);
+    struct tm timeinfo;
+    gmtime_r(&now, &timeinfo);
+    const bool timeLooksReal = (timeinfo.tm_year + 1900) >= kPlausibleYear;
+
+    if (statusComplete || timeLooksReal) {
+      if (!timeLooksReal) {
+        // Reported complete but the clock is still nonsense: keep waiting
+        // rather than writing an epoch date into the RTC.
+        delay(100);
+        continue;
+      }
       Rtc::DateTime dt;
       dt.year = static_cast<uint16_t>(timeinfo.tm_year + 1900);
       dt.month = static_cast<uint8_t>(timeinfo.tm_mon + 1);
@@ -125,11 +150,16 @@ bool HalClock::syncFromNTP() {
                 dt.second);
         return true;
       }
+      // The time arrived but the RTC would not take it — a wiring or battery
+      // fault, not a network one, and worth saying so.
+      LOG_ERR("CLK", "RTC write failed after a good NTP reply");
+      _lastSyncError = "clock chip did not accept the time";
       return false;
     }
     delay(100);
   }
 
-  LOG_ERR("CLK", "NTP sync timed out");
+  LOG_ERR("CLK", "NTP sync timed out after %d ms", maxAttempts * 100);
+  _lastSyncError = "no reply from a time server";
   return false;
 }

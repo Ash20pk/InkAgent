@@ -12,6 +12,7 @@ class HalClock {
   mutable uint8_t _cachedHour = 0;
   mutable uint8_t _cachedMinute = 0;
   mutable bool _hasCachedTime = false;
+  const char* _lastSyncError = "";
   mutable unsigned long _lastPollMs = 0;
 
   static constexpr unsigned long CLOCK_POLL_MS = 10000;  // 10 seconds
@@ -51,4 +52,9 @@ class HalClock {
   // Debouncing (skip if already synced once) is enforced by the caller, not here,
   // so the HAL stays free of any app-layer settings dependency.
   bool syncFromNTP();
+
+  // Why the last syncFromNTP() failed, in words, or empty after a success.
+  // A bare pass/fail leaves the owner with nothing to act on, and this runs
+  // over Wi-Fi where the serial log is already gone.
+  const char* lastSyncError() const { return _lastSyncError; }
 };

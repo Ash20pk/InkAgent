@@ -131,10 +131,16 @@ void ClockSyncActivity::render(RenderLock&&) {
       renderer.drawCenteredText(UI_12_FONT_ID, midY - 20, tr(STR_CLOCK_SYNC_NO_WIFI), true, EpdFontFamily::BOLD);
       renderer.drawCenteredText(UI_10_FONT_ID, midY + 10, tr(STR_CLOCK_SYNC_NO_WIFI_HINT));
       break;
-    case FAILED:
+    case FAILED: {
       renderer.drawCenteredText(UI_12_FONT_ID, midY - 20, tr(STR_CLOCK_SYNC_FAIL), true, EpdFontFamily::BOLD);
-      renderer.drawCenteredText(UI_10_FONT_ID, midY + 10, tr(STR_CHECK_SERIAL_OUTPUT));
+      // Serial is already gone by the time this runs — the sync needs Wi-Fi,
+      // and Wi-Fi takes USB serial with it on this board. Telling the owner to
+      // check output they cannot see is worse than saying nothing, so the
+      // reason goes on the screen.
+      const char* why = halClock.lastSyncError();
+      renderer.drawCenteredText(UI_10_FONT_ID, midY + 10, (why && *why) ? why : tr(STR_CHECK_SERIAL_OUTPUT));
       break;
+    }
   }
 
   if (state != SYNCING) {
