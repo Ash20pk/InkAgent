@@ -5,12 +5,21 @@
 // phone held next to the reader during pairing.
 import { json, html, readBody, cookies } from '../http.js';
 import { now, id, sha } from '../db.js';
-import { timingSafeEqual } from 'node:crypto';
 import { validateManifest, SOURCES, ICONS, LIMITS } from '../manifest.js';
+import { available as oauthAvailable, authorizeUrl, emailFromCode, PROVIDERS } from '../oauth.js';
 
-// INK_ACCESS_CODE gates sign-in on public deployments until real OAuth lands.
-const ACCESS_CODE = process.env.INK_ACCESS_CODE || '';
-const safeEqual = (a, b) => { const x = Buffer.from(a), y = Buffer.from(b); return x.length === y.length && timingSafeEqual(x, y); };
+// Sign-in is OAuth. The email box that preceded it verified nothing — it
+// issued a session for any address typed into it — and the shared access code
+// fencing it is not a secret once a beta has more than a few people in it.
+//
+// INK_DEV_LOGIN re-enables that box for local work and for the tests. It is
+// deliberately opt-in: a deployment with no OAuth configured and no dev flag
+// refuses to sign anyone in rather than falling back to something open.
+//
+// Read per request rather than captured at import, so it cannot depend on
+// whether the environment was set before or after this module was first
+// pulled in — a trap that silently disables it under a test runner.
+const devLogin = () => process.env.INK_DEV_LOGIN === '1';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -117,7 +126,7 @@ details>summary{cursor:pointer;color:var(--muted);font-size:.875rem;padding:.4re
   .row button{width:100%}
 }`;
 
-const NAV = [['/devices', 'Readers'], ['/apps', 'Apps'], ['/provider', 'Your AI'], ['/traces', 'Traces']];
+const NAV = [['/devices', 'Readers'], ['/apps', 'Apps'], ['/provider', 'Your AI']];
 
 const FAVICON = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f6f4f'/%3E%3Crect x='9' y='8' width='14' height='16' rx='2' fill='%23fff'/%3E%3Crect x='12' y='12' width='8' height='1.6' fill='%232f6f4f'/%3E%3Crect x='12' y='16' width='8' height='1.6' fill='%232f6f4f'/%3E%3C/svg%3E";
 
@@ -144,6 +153,8 @@ ${chrome
 // in, rather than on a dead-end page the user has to navigate back from.
 const note = (text, bad = false) => `<div class="note${bad ? ' bad' : ''}">${text}</div>`;
 
+const securePart = () => (process.env.PUBLIC_URL || '').startsWith('https') ? '; Secure' : '';
+
 const when = (ts) => ts ? new Date(ts * 1000).toLocaleString() : 'never';
 
 // What the editor opens on, so the first thing an owner sees is a working app.
@@ -169,7 +180,7 @@ export const PRESETS = {
   ollama:     { name: 'Ollama / LM Studio / any OpenAI-compatible URL', base_url: 'http://localhost:11434/v1', model: 'llama3.2' },
 };
 
-export function dashboardRoutes(db, { devTokens }) {
+export function dashboardRoutes(db, { devTokens, publicUrl = process.env.PUBLIC_URL || '', fetchImpl = fetch }) {
   const q = {
     userByEmail: db.prepare(`SELECT * FROM users WHERE email = ?`),
     userInsert: db.prepare(`INSERT INTO users (id,email,created_at) VALUES (?,?,?)`),
@@ -184,7 +195,6 @@ export function dashboardRoutes(db, { devTokens }) {
     provGet: db.prepare(`SELECT * FROM providers WHERE user_id = ?`),
     provSet: db.prepare(`INSERT INTO providers (user_id,kind,base_url,api_key,model,updated_at) VALUES (?,?,?,?,?,?)
                          ON CONFLICT(user_id) DO UPDATE SET kind=excluded.kind, base_url=excluded.base_url, api_key=excluded.api_key, model=excluded.model, updated_at=excluded.updated_at`),
-    traces: db.prepare(`SELECT t.*, d.name AS device_name FROM turns t JOIN devices d ON d.id = t.device_id WHERE d.user_id = ? ORDER BY t.created_at DESC LIMIT 50`),
     apps: db.prepare(`SELECT * FROM apps WHERE user_id = ? ORDER BY name`),
     appGet: db.prepare(`SELECT * FROM apps WHERE id = ? AND user_id = ?`),
     appInsert: db.prepare(`INSERT INTO apps (id,user_id,name,icon,manifest,updated_at) VALUES (?,?,?,?,?,?)`),
@@ -268,33 +278,95 @@ export function dashboardRoutes(db, { devTokens }) {
   return {
     'GET /': async ({ res }) => { res.writeHead(302, { location: '/devices' }); res.end(); },
 
-    'GET /login': async ({ res, query }) => html(res, 200, page('Sign in', `
-      <form method="post" action="/login"><input type="hidden" name="next" value="${esc(query.next || '/devices')}">
-      <label>Email <input name="email" type="email" required autofocus autocomplete="email"></label>
-      ${ACCESS_CODE ? '<label>Access code <input name="code" type="password" required autocomplete="one-time-code"></label>' : ''}
-      <div class="actions"><button class="btn">Sign in</button></div></form>`, { chrome: false })),
+    'GET /login': async ({ res, query }) => {
+      const providers = oauthAvailable();
+      const next = esc(query.next || '/devices');
+      const buttons = providers.map(k =>
+        `<div class="actions"><a class="btn" href="/auth/start?p=${k}&next=${encodeURIComponent(query.next || '/devices')}">Continue with ${esc(PROVIDERS[k].name)}</a></div>`).join('');
+
+      const devBox = devLogin() ? `
+        <details${providers.length ? '' : ' open'}>
+          <summary>Development sign-in</summary>
+          ${note('This accepts any address without verifying it. It is on because INK_DEV_LOGIN is set, and must not be set on a public relay.', true)}
+          <form method="post" action="/login"><input type="hidden" name="next" value="${next}">
+            <label>Email <input name="email" type="email" required autocomplete="email"></label>
+            <div class="actions"><button>Sign in</button></div>
+          </form>
+        </details>` : '';
+
+      const nothing = (!providers.length && !devLogin()) ? `<div class="empty">
+        <strong>No sign-in method configured</strong>
+        <p>Set ${Object.values(PROVIDERS).map(p => `<code>${p.idEnv}</code>`).join(' or ')} together with the matching
+        secret, then restart the relay. For local work, set <code>INK_DEV_LOGIN=1</code> instead.</p></div>` : '';
+
+      html(res, 200, page('Sign in', buttons + nothing + devBox, {
+        chrome: false,
+        lead: providers.length ? 'Your readers and your model key live behind this account.' : '',
+      }));
+    },
+
+    // Hands the browser to the provider. The state is random, kept in a
+    // short-lived cookie, and compared on the way back, so a callback the user
+    // did not start cannot mint a session.
+    'GET /auth/start': async ({ res, query }) => {
+      const key = String(query.p || '');
+      const state = id(18);
+      const url = authorizeUrl(key, { publicUrl, state });
+      if (!url) { res.writeHead(302, { location: '/login' }); return res.end(); }
+      const next = String(query.next || '/devices');
+      const safeNext = next.startsWith('/') ? next : '/devices';
+      res.writeHead(302, {
+        location: url,
+        'set-cookie': `ink_oauth=${key}:${state}:${encodeURIComponent(safeNext)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600${securePart()}`,
+      });
+      res.end();
+    },
+
+    'GET /auth/callback': async ({ req, res, query }) => {
+      const raw = cookies(req).ink_oauth || '';
+      const [key, state, nextEnc] = raw.split(':');
+      const fail = (why) => html(res, 400, page('Sign in', note(esc(why), true) +
+        '<div class="actions"><a class="btn" href="/login">Try again</a></div>', { chrome: false }));
+
+      if (!key || !state) return fail('That sign-in did not start here. Begin again from the sign-in page.');
+      if (String(query.state || '') !== state) return fail('Sign-in could not be verified. Begin again from the sign-in page.');
+
+      const email = await emailFromCode(key, { code: String(query.code || ''), publicUrl, fetchImpl });
+      if (!email) {
+        // Most often a provider account with no verified address on it.
+        return fail(`${PROVIDERS[key] ? PROVIDERS[key].name : 'That provider'} did not return a verified email address.`);
+      }
+
+      let u = q.userByEmail.get(email);
+      if (!u) { u = { id: id(), email }; q.userInsert.run(u.id, email, now()); }
+      const sid = id(24); q.sessInsert.run(sid, u.id, now());
+      const next = nextEnc ? decodeURIComponent(nextEnc) : '/devices';
+      res.writeHead(302, {
+        location: next.startsWith('/') ? next : '/devices',
+        'set-cookie': [
+          `ink_session=${sid}; Path=/; HttpOnly; SameSite=Lax${securePart()}`,
+          'ink_oauth=; Path=/; Max-Age=0',
+        ],
+      });
+      res.end();
+    },
 
     'POST /login': async ({ req, res }) => {
+      if (!devLogin()) { res.writeHead(302, { location: '/login' }); return res.end(); }
       const b = await readBody(req);
       const email = String(b.email || '').trim().toLowerCase();
-      const nextVal = esc(b.next || '/devices');
-      const retry = (msg) => page('Sign in', `
-        ${note(msg, true)}
-        <form method="post" action="/login"><input type="hidden" name="next" value="${nextVal}">
-        <label>Email <input name="email" type="email" value="${esc(email)}" required autofocus autocomplete="email"></label>
-        ${ACCESS_CODE ? '<label>Access code <input name="code" type="password" required autocomplete="one-time-code"></label>' : ''}
-        <div class="actions"><button class="btn">Sign in</button></div></form>`, { chrome: false });
-      if (!/^[^@\s]+@[^@\s]+$/.test(email)) return html(res, 400, retry('That does not look like an email address.'));
-      if (ACCESS_CODE && !safeEqual(String(b.code || ''), ACCESS_CODE)) {
-        await new Promise(r => setTimeout(r, 500)); // slow brute force a little
-        return html(res, 403, retry('That access code is not right.'));
+      if (!/^[^@\s]+@[^@\s]+$/.test(email)) {
+        return html(res, 400, page('Sign in', note('That does not look like an email address.', true) +
+          '<div class="actions"><a class="btn" href="/login">Try again</a></div>', { chrome: false }));
       }
       let u = q.userByEmail.get(email);
       if (!u) { u = { id: id(), email }; q.userInsert.run(u.id, email, now()); }
       const sid = id(24); q.sessInsert.run(sid, u.id, now());
       const next = String(b.next || '/devices'); const safe = next.startsWith('/') ? next : '/devices';
-      res.writeHead(302, { location: safe, 'set-cookie': `ink_session=${sid}; Path=/; HttpOnly; SameSite=Lax${process.env.PUBLIC_URL?.startsWith('https') ? '; Secure' : ''}` }); res.end();
+      res.writeHead(302, { location: safe, 'set-cookie': `ink_session=${sid}; Path=/; HttpOnly; SameSite=Lax${securePart()}` });
+      res.end();
     },
+
     'GET /logout': async ({ res }) => { res.writeHead(302, { location: '/login', 'set-cookie': 'ink_session=; Path=/; Max-Age=0' }); res.end(); },
 
     'GET /claim': async ({ req, res, query }) => {
@@ -461,30 +533,6 @@ export function dashboardRoutes(db, { devTokens }) {
       res.writeHead(302, { location: '/devices' }); res.end();
     },
 
-    'GET /traces': async ({ req, res }) => {
-      const u = requireUser(req, res); if (!u) return;
-      const rows = q.traces.all(u.id);
-      html(res, 200, page('Traces', rows.length === 0
-        ? `<div class="empty"><strong>Nothing yet</strong><p>Ask a book something on your reader and the exchange shows up here.</p></div>`
-        : rows.map(t => {
-          const r = JSON.parse(t.request);
-          return `<div class="card">
-            <div class="head"><h2>${esc(t.kind)}</h2><span class="pill">${t.latency_ms} ms</span></div>
-            <div class="meta"><span>${esc(when(t.created_at))}</span><span>${esc(t.device_name)}</span>${t.model ? `<span>${esc(t.model)}</span>` : ''}${t.truncated ? '<span>cut to fit</span>' : ''}</div>
-            ${r.book ? `<p class="muted small">${esc(r.book)}${r.chapter ? ' · ' + esc(r.chapter) : ''}</p>` : ''}
-            <details><summary>Passage sent</summary><pre>${esc(r.text.slice(0, 400))}${r.text.length > 400 ? '…' : ''}</pre></details>
-            <p class="small" style="margin-bottom:.1rem"><b>On the reader</b></p><pre>${esc(t.sent_text)}</pre>
-            ${t.truncated ? `<details><summary>Full answer before trimming</summary><pre>${esc(t.full_text)}</pre></details>` : ''}
-            <div class="meta"><span><code>${esc(t.sid)}</code></span></div>
-          </div>`;
-        }).join(''), { active: '/traces',
-          lead: rows.length === 0 ? 'Every exchange between your readers and your model.'
-                                  : `The last ${rows.length} exchange${rows.length === 1 ? '' : 's'}, newest first.` }));
-    },
-    'GET /s': async ({ req, res, query }) => { // deep link from the NFC tag: /s?sid=...
-      const u = requireUser(req, res); if (!u) return;
-      res.writeHead(302, { location: '/traces' }); res.end();
-    },
     'GET /health': async ({ res }) => json(res, 200, { ok: true }),
   };
 

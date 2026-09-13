@@ -9,6 +9,6 @@ if ! command -v docker >/dev/null; then
   curl -fsSL https://get.docker.com | sh >/dev/null
 fi
 ufw allow OpenSSH >/dev/null; ufw allow 80/tcp >/dev/null; ufw allow 443/tcp >/dev/null; ufw --force enable >/dev/null
-[ -f .env ] || { cp .env.example .env; echo "edit /opt/inkagent/deploy/.env (INK_ACCESS_CODE) then re-run"; exit 1; }
+[ -f .env ] || { cp .env.example .env; echo "edit /opt/inkagent/deploy/.env (OAuth client id and secret) then re-run"; exit 1; }
 docker compose up -d --build
 docker compose ps

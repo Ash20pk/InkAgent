@@ -17,7 +17,12 @@ export function deviceRoutes(db, { publicUrl, fetchImpl }) {
     provider: db.prepare(`SELECT * FROM providers WHERE user_id = ?`),
     apps: db.prepare(`SELECT id, name, icon, updated_at FROM apps WHERE user_id = ? ORDER BY name`),
     appManifest: db.prepare(`SELECT manifest FROM apps WHERE id = ? AND user_id = ?`),
-    turn: db.prepare(`INSERT INTO turns (sid,device_id,kind,request,full_text,sent_text,truncated,model,latency_ms,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`),
+    // Content is deliberately not stored. With the traces page gone there is
+    // nothing to read it back, and a table holding the passages people are
+    // reading is a liability rather than a feature. The row stays for the
+    // operational facts — which device, which app, how long, did it truncate —
+    // and the content columns are written empty.
+    turn: db.prepare(`INSERT INTO turns (sid,device_id,kind,request,full_text,sent_text,truncated,model,latency_ms,created_at) VALUES (?,?,?,'','','',?,?,?,?)`),
     pendingToken: new Map(), // device_code -> plaintext token, handed out exactly once
   };
 
@@ -79,11 +84,11 @@ export function deviceRoutes(db, { publicUrl, fetchImpl }) {
       const sid = id(9);
       try {
         const r = await runAsk({ provider: { baseUrl: p.base_url, apiKey: p.api_key, model: p.model }, req: b, budget: d.budget, fetchImpl });
-        q.turn.run(sid, d.id, b.kind, JSON.stringify(b), r.full, r.text, r.truncated ? 1 : 0, r.model, r.latencyMs, now());
+        q.turn.run(sid, d.id, b.kind, r.truncated ? 1 : 0, r.model, r.latencyMs, now());
         json(res, 200, { text: r.text, sid, trunc: r.truncated });
       } catch (e) {
         if (!(e instanceof ProviderError)) throw e;
-        q.turn.run(sid, d.id, b.kind, JSON.stringify(b), '', `ERR ${e.message}`, 0, p.model, 0, now());
+        q.turn.run(sid, d.id, `${b.kind}:error`, 0, p.model, 0, now());
         json(res, e.status === 401 || e.status === 403 ? 402 : 503,
              { error: 'provider', sid, text: e.status === 401 || e.status === 403
                ? 'Your AI key was rejected. Check it on the dashboard.'
@@ -104,14 +109,14 @@ export function deviceRoutes(db, { publicUrl, fetchImpl }) {
       const sid = id(9);
       try {
         const r = await runEngage({ provider: { baseUrl: p.base_url, apiKey: p.api_key, model: p.model }, req: b, budget: d.budget, fetchImpl });
-        q.turn.run(sid, d.id, `engage:${b.app}`, JSON.stringify(b), r.full, r.text, r.truncated ? 1 : 0, r.model, r.latencyMs, now());
+        q.turn.run(sid, d.id, `engage:${b.app}`, r.truncated ? 1 : 0, r.model, r.latencyMs, now());
         // `text` duplicates the row the screen carries, deliberately: the device
         // caches the screen opaquely for the renderer and shows `text` immediately,
         // and parsing a nested array on the device to recover it would be worse.
         json(res, 200, { screen: r.screen, text: r.text, sid, trunc: r.truncated });
       } catch (e) {
         if (!(e instanceof ProviderError)) throw e;
-        q.turn.run(sid, d.id, `engage:${b.app}`, JSON.stringify(b), '', `ERR ${e.message}`, 0, p.model, 0, now());
+        q.turn.run(sid, d.id, `engage:${b.app}:error`, 0, p.model, 0, now());
         // No screen on failure: the device keeps whatever it cached last rather
         // than replacing a good question with an error on an ambient surface.
         json(res, e.status === 401 || e.status === 403 ? 402 : 503,

@@ -37,7 +37,7 @@ test('long answers are cut to the device budget at a sentence boundary and flagg
   assert.equal(r.json.trunc, true);
   assert.match(r.json.text, /\.$/, 'ends on a sentence');
   const turn = R.app.db.prepare(`SELECT * FROM turns WHERE sid = ?`).get(r.json.sid);
-  assert.equal(turn.full_text, long, 'full answer kept for the dashboard');
+  assert.equal(turn.full_text, '', 'the answer itself is not kept');
   P.close();
 });
 
@@ -96,10 +96,25 @@ test('every error response carries text the device can render', async () => {
   }
 });
 
-test('traces page shows the turn with the full answer when truncated', async () => {
+test('what the reader was reading is never stored', async () => {
+  // The traces page is gone, so nothing can read this back — and a table of the
+  // passages people are reading is a liability rather than a feature. The row
+  // stays for the operational facts; the content columns stay empty.
+  const P = await startMockProvider({ reply: () => 'An answer about the passage.' });
+  await R.setProvider(cookie, P.url);
+  const r = await ask({ kind: 'explain', book: 'Pride and Prejudice', text: PASSAGE });
+  const turn = R.app.db.prepare(`SELECT * FROM turns WHERE sid = ?`).get(r.json.sid);
+
+  assert.equal(turn.request, '', 'the passage is not stored');
+  assert.equal(turn.full_text, '', 'the model output is not stored');
+  assert.equal(turn.sent_text, '', 'what went to the reader is not stored');
+  assert.equal(turn.kind, 'explain', 'the operational facts remain');
+  assert.ok(turn.latency_ms >= 0);
+
+  // And nothing anywhere serves it.
   const res = await fetch(R.base + '/traces', { headers: { cookie } });
-  const html = await res.text();
-  assert.match(html, /Sentence number 0/); assert.match(html, /cut to fit/);
+  assert.equal(res.status, 404, 'no traces page to read it back from');
+  P.close();
 });
 
 test('provider page rejects a non-http base URL', async () => {

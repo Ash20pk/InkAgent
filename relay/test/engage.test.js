@@ -103,8 +103,9 @@ test('every turn is recorded for the dashboard, labelled by app', async () => {
   await R.setProvider(cookie, P.url);
   const r = await engage({ app: 'explain_back', text: PASSAGE });
   const turn = R.app.db.prepare(`SELECT * FROM turns WHERE sid = ?`).get(r.json.sid);
-  assert.equal(turn.kind, 'engage:explain_back');
-  assert.match(turn.sent_text, /\?$/);
+  assert.equal(turn.kind, 'engage:explain_back', 'labelled by app');
+  assert.equal(turn.sent_text, '', 'the question itself is not stored');
+  assert.equal(turn.request, '', 'nor the passage it was about');
   P.close();
 });
 

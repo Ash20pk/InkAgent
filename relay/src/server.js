@@ -6,7 +6,7 @@ import { dashboardRoutes } from './routes/dashboard.js';
 export function createApp({ dbPath, publicUrl, fetchImpl = fetch } = {}) {
   const db = openDb(dbPath);
   const dev = deviceRoutes(db, { publicUrl, fetchImpl });
-  const dash = dashboardRoutes(db, { devTokens: dev._internal.pendingToken });
+  const dash = dashboardRoutes(db, { devTokens: dev._internal.pendingToken, publicUrl, fetchImpl });
   const { _internal, ...devPublic } = dev;
   return { db, server: makeServer({ ...devPublic, ...dash }) };
 }

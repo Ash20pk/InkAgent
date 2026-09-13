@@ -20,6 +20,10 @@ export async function startMockProvider(script = {}) {
 }
 
 export async function startRelay() {
+  // The suite signs in through the development email box; the real path is
+  // OAuth, which needs a provider. DEV_LOGIN is read when dashboard.js is
+  // first imported, so this has to be set before createApp pulls it in.
+  process.env.INK_DEV_LOGIN = '1';
   const app = createApp({ dbPath: ':memory:', publicUrl: 'http://relay.test' });
   await new Promise(r => app.server.listen(0, r));
   const base = `http://127.0.0.1:${app.server.address().port}`;
