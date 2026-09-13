@@ -36,102 +36,126 @@ function noteFailure(email) {
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const STYLE = `:root{
-  --bg:#fbfaf8; --fg:#1b1a17; --muted:#6b6862; --card:#fff; --line:#e6e2da;
-  --accent:#2f6f4f; --accent-fg:#fff; --danger:#9c3328; --shadow:0 1px 2px rgba(0,0,0,.05);
+  /* The panel resolves four levels and nothing else, so the dashboard uses
+     four: paper, a rule grey, a muted grey, and ink. No colour, because the
+     device has none and a green button here would be describing a machine that
+     cannot show it. */
+  --paper:#f5f3ed; --l2:#cdc9be; --l1:#6d695f; --ink:#17160f;
   --gap:1rem;
 }
+/* Night mode on the reader is inverted output polarity, not a different
+   palette. Same here: the four levels swap ends. */
 @media (prefers-color-scheme:dark){:root{
-  --bg:#16150f; --fg:#ece8df; --muted:#9a958a; --card:#1f1e17; --line:#332f26;
-  --accent:#7fba97; --accent-fg:#11221a; --danger:#e08a7e; --shadow:none;
+  --paper:#17160f; --l2:#3b382f; --l1:#9d988b; --ink:#f0ede4;
 }}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
-body{font:16px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
-  background:var(--bg);color:var(--fg);margin:0;padding:0 var(--gap) 4rem}
-.wrap{max-width:42rem;margin:0 auto}
-header.top{display:flex;align-items:baseline;gap:.6rem;padding:1.25rem 0 .25rem}
-.brand{font-weight:640;letter-spacing:-.01em;text-decoration:none;color:var(--fg)}
-.brand span{color:var(--muted);font-weight:400}
+/* No transitions anywhere. A panel that takes a second to repaint does not
+   ease, and the stillness is most of the character. */
+*,*::before,*::after{transition:none!important;animation:none!important}
+body{font:16px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  background:var(--paper);color:var(--ink);margin:0;padding:0 var(--gap) 4rem}
+.wrap{max-width:40rem;margin:0 auto}
 
-/* Nav scrolls sideways rather than wrapping to two rows on a narrow phone,
-   which used to push the page title below the fold during pairing. */
-nav{display:flex;gap:.15rem;border-bottom:1px solid var(--line);margin-bottom:1.25rem;
-  overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+header.top{display:flex;align-items:baseline;gap:.6rem;padding:1.5rem 0 .5rem}
+.brand{font-family:ui-serif,Georgia,"Times New Roman",serif;font-size:1.05rem;
+  letter-spacing:.01em;text-decoration:none;color:var(--ink)}
+.brand span{color:var(--l1)}
+
+/* Selection is an underline, as it is on the reader: a rule under the label
+   rather than an inverted band. */
+nav{display:flex;gap:0;border-bottom:1px solid var(--l2);margin-bottom:1.5rem;
+  overflow-x:auto;scrollbar-width:none}
 nav::-webkit-scrollbar{display:none}
-nav a{padding:.6rem .7rem;text-decoration:none;color:var(--muted);white-space:nowrap;
-  border-bottom:2px solid transparent;margin-bottom:-1px}
-nav a:hover{color:var(--fg)}
-nav a[aria-current]{color:var(--fg);border-bottom-color:var(--accent);font-weight:560}
+nav a{padding:.55rem .8rem;text-decoration:none;color:var(--l1);white-space:nowrap;
+  border-bottom:3px solid transparent;margin-bottom:-1px}
+nav a:hover{color:var(--ink)}
+nav a[aria-current]{color:var(--ink);border-bottom-color:var(--ink)}
 nav .spacer{flex:1;min-width:.5rem}
 
-h1{font-size:1.4rem;line-height:1.25;letter-spacing:-.015em;margin:0}
-.lead{color:var(--muted);margin:.3rem 0 1.25rem}
-h2{font-size:1rem;margin:0}
+h1{font-family:ui-serif,Georgia,"Times New Roman",serif;font-weight:600;
+  font-size:1.6rem;line-height:1.2;letter-spacing:-.01em;margin:0}
+h2{font-family:ui-serif,Georgia,"Times New Roman",serif;font-weight:600;font-size:1.05rem;margin:0}
+.lead{color:var(--l1);margin:.35rem 0 1.5rem}
 p{margin:.5rem 0}
-a{color:var(--accent)}
-.muted{color:var(--muted)}
+a{color:var(--ink);text-underline-offset:2px}
+.muted{color:var(--l1)}
 .small{font-size:.875rem}
 
-label{display:block;margin-top:1rem;font-weight:560;font-size:.9rem}
-label .hint{display:block;font-weight:400;color:var(--muted);font-size:.85rem;margin-top:.15rem}
-/* 16px on controls: anything smaller makes iOS Safari zoom the page on focus,
-   which on the pairing screen looks like the layout breaking. */
-input,select,button,textarea{font:inherit;font-size:16px;border-radius:8px;border:1px solid var(--line);
-  padding:.6rem .7rem;background:var(--card);color:var(--fg);margin-top:.3rem;min-height:44px}
-textarea{min-height:12rem;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;width:100%}
+label{display:block;margin-top:1.1rem;font-weight:600;font-size:.85rem;
+  letter-spacing:.04em;text-transform:uppercase;color:var(--l1)}
+label .hint{display:block;font-weight:400;text-transform:none;letter-spacing:0;
+  color:var(--l1);font-size:.85rem;margin-top:.2rem}
+
+/* Square, hairline, flat. E-ink has no depth to imply. 16px on controls so iOS
+   does not zoom the page on focus. */
+input,select,button,textarea{font:inherit;font-size:16px;border-radius:0;
+  border:1px solid var(--l1);padding:.6rem .7rem;background:var(--paper);
+  color:var(--ink);margin-top:.35rem;min-height:44px;box-shadow:none;
+  -webkit-appearance:none;appearance:none}
+select{background-image:linear-gradient(45deg,transparent 50%,var(--ink) 50%),
+  linear-gradient(135deg,var(--ink) 50%,transparent 50%);
+  background-position:calc(100% - 18px) 50%,calc(100% - 13px) 50%;
+  background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:2.2rem}
+textarea{min-height:14rem;font:13px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace;width:100%}
 input:focus-visible,select:focus-visible,button:focus-visible,textarea:focus-visible{
-  outline:2px solid var(--accent);outline-offset:1px}
+  outline:2px solid var(--ink);outline-offset:1px}
 input[type=email],input[type=password],input[type=text],input:not([type]),select{width:100%}
-button{cursor:pointer;font-weight:560;width:auto}
-.btn{background:var(--accent);color:var(--accent-fg);border-color:transparent}
-.btn-danger{background:transparent;color:var(--danger)}
-/* Links that sit among buttons need the same box so a row does not stagger. */
+button{cursor:pointer;font-weight:600;width:auto;letter-spacing:.02em}
+/* The primary action is an inverted block, which is how the reader marks the
+   thing you are on. */
+.btn{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.btn-danger{background:transparent;color:var(--ink);border-style:dashed}
 a.btn,a.btn-quiet{display:inline-flex;align-items:center;justify-content:center;
-  min-height:44px;padding:.6rem .9rem;border-radius:8px;text-decoration:none}
-a.btn-quiet{border:1px solid var(--line);color:var(--fg)}
-.actions{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1rem;align-items:center}
+  min-height:44px;padding:.6rem 1rem;text-decoration:none;border:1px solid var(--ink)}
+a.btn-quiet{color:var(--ink);background:var(--paper)}
+.actions{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1.1rem;align-items:center}
 .actions form{margin:0}
 
-.card{border:1px solid var(--line);border-radius:12px;padding:1rem;margin:.75rem 0;
-  background:var(--card);box-shadow:var(--shadow)}
+.card{border:1px solid var(--l2);border-radius:0;padding:1rem;margin:.9rem 0;
+  background:var(--paper);box-shadow:none}
 .card > :first-child{margin-top:0}
 .row{display:flex;gap:.5rem;align-items:center;flex-wrap:wrap}
 .row input{flex:1;min-width:8rem;margin-top:0}
-.note{border-left:3px solid var(--accent);background:var(--card);border-radius:0 8px 8px 0;
-  padding:.7rem .9rem;margin:1rem 0}
-.note.bad{border-left-color:var(--danger)}
+
+/* A dithered edge instead of a coloured one: two greys at 45 degrees, which is
+   how the panel fakes a tone it does not have. */
+.note{border-left:6px solid var(--ink);background:var(--paper);border-radius:0;
+  padding:.75rem .9rem;margin:1.1rem 0}
+.note.bad{border-left:6px solid transparent;
+  border-image:repeating-linear-gradient(45deg,var(--ink) 0 3px,var(--paper) 3px 6px) 6}
 .note ul{margin:.4rem 0 0;padding-left:1.1rem}
-.empty{border:1px dashed var(--line);border-radius:12px;padding:2rem 1rem;text-align:center;color:var(--muted)}
-.empty strong{display:block;font-size:1.05rem;color:var(--fg);font-weight:560;margin-bottom:.25rem}
 
-/* Setup checklist: the one place that says what to do next, so a new owner is
-   not left guessing which tab matters first. */
+.empty{border:1px dashed var(--l2);border-radius:0;padding:2.25rem 1rem;text-align:center;color:var(--l1)}
+.empty strong{display:block;font-family:ui-serif,Georgia,serif;font-size:1.15rem;
+  color:var(--ink);font-weight:600;margin-bottom:.35rem}
+
 .steps{list-style:none;padding:0;margin:0}
-.steps li{display:flex;gap:.6rem;align-items:flex-start;padding:.55rem 0;border-bottom:1px solid var(--line)}
+.steps li{display:flex;gap:.7rem;align-items:flex-start;padding:.6rem 0;border-bottom:1px solid var(--l2)}
 .steps li:last-child{border-bottom:0}
-.steps .tick{flex:0 0 1.4rem;font-weight:700;color:var(--accent)}
-.steps .todo{flex:0 0 1.4rem;color:var(--muted)}
-.steps .done{color:var(--muted);text-decoration:line-through}
+.steps .tick,.steps .todo{flex:0 0 1.5rem;font-weight:700;font-variant-numeric:tabular-nums}
+.steps .tick{color:var(--ink)}
+.steps .todo{color:var(--l1)}
+.steps .done{color:var(--l1);text-decoration:line-through}
 
-code{background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:.05rem .3rem;font-size:.9em;
-  overflow-wrap:anywhere}
-pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:.75rem;
-  white-space:pre-wrap;overflow-wrap:anywhere;margin:.4rem 0;font-size:.85rem}
-.pill{display:inline-block;font-size:.75rem;font-weight:560;padding:.15rem .5rem;border-radius:999px;
-  border:1px solid var(--line);color:var(--muted);white-space:nowrap}
-.pill.off{color:var(--danger);border-color:var(--danger)}
-.meta{color:var(--muted);font-size:.85rem;display:flex;flex-wrap:wrap;gap:.2rem .6rem;margin-top:.5rem}
-.code-input{font-size:1.5rem;letter-spacing:.16em;text-transform:uppercase;text-align:center;
+code{background:transparent;border:1px solid var(--l2);border-radius:0;padding:.05rem .3rem;
+  font-size:.9em;overflow-wrap:anywhere}
+pre{background:transparent;border:1px solid var(--l2);border-radius:0;padding:.8rem;
+  white-space:pre-wrap;overflow-wrap:anywhere;margin:.5rem 0;font-size:.85rem}
+.pill{display:inline-block;font-size:.7rem;font-weight:600;letter-spacing:.06em;
+  text-transform:uppercase;padding:.2rem .5rem;border-radius:0;border:1px solid var(--l1);
+  color:var(--l1);white-space:nowrap}
+.pill.off{color:var(--paper);background:var(--ink);border-color:var(--ink)}
+.meta{color:var(--l1);font-size:.85rem;display:flex;flex-wrap:wrap;gap:.2rem .7rem;margin-top:.6rem}
+.code-input{font-size:1.6rem;letter-spacing:.2em;text-transform:uppercase;text-align:center;
   font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-details>summary{cursor:pointer;color:var(--muted);font-size:.875rem;padding:.4rem 0}
+details>summary{cursor:pointer;color:var(--l1);font-size:.875rem;padding:.45rem 0}
 .head{display:flex;justify-content:space-between;align-items:baseline;gap:.75rem;flex-wrap:wrap}
 
 @media (max-width:30rem){
   :root{--gap:.85rem}
-  .card{padding:.85rem;border-radius:10px}
-  h1{font-size:1.25rem}
-  /* One action per line, full width: side-by-side buttons at this width end up
-     under 44px wide and are genuinely hard to hit. */
+  .card{padding:.85rem}
+  h1{font-size:1.35rem}
   .actions{flex-direction:column;align-items:stretch}
   .actions form,.actions button,.actions a.btn,.actions a.btn-quiet{width:100%}
   .row{flex-direction:column;align-items:stretch}
@@ -140,7 +164,7 @@ details>summary{cursor:pointer;color:var(--muted);font-size:.875rem;padding:.4re
 
 const NAV = [['/devices', 'Readers'], ['/apps', 'Apps'], ['/provider', 'Your AI'], ['/account', 'Account']];
 
-const FAVICON = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f6f4f'/%3E%3Crect x='9' y='8' width='14' height='16' rx='2' fill='%23fff'/%3E%3Crect x='12' y='12' width='8' height='1.6' fill='%232f6f4f'/%3E%3Crect x='12' y='16' width='8' height='1.6' fill='%232f6f4f'/%3E%3C/svg%3E";
+const FAVICON = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23f5f3ed'/%3E%3Crect x='6' y='5' width='20' height='22' fill='none' stroke='%2317160f' stroke-width='2'/%3E%3Crect x='10' y='11' width='12' height='2' fill='%2317160f'/%3E%3Crect x='10' y='16' width='12' height='2' fill='%2317160f'/%3E%3Crect x='10' y='21' width='7' height='2' fill='%2317160f'/%3E%3C/svg%3E";
 
 // A signed-out page gets no nav: tabs you cannot use are noise.
 //
@@ -482,7 +506,14 @@ export function dashboardRoutes(db, { devTokens, publicUrl = process.env.PUBLIC_
       html(res, 200, page('Account', `
         <div class="card">
           <div class="head"><h2>${esc(u.email)}</h2></div>
-          <div class="meta"><span>signed in with a password</span></div>
+          <form method="post" action="/account/password" style="margin-top:.5rem">
+            <label>Current password <input name="current" type="password" required autocomplete="current-password"></label>
+            <label>New password
+              <span class="hint">At least 10 characters.</span>
+              <input name="next" type="password" required autocomplete="new-password">
+            </label>
+            <div class="actions"><button>Change password</button></div>
+          </form>
         </div>
 
         <h2 style="margin-top:1.5rem">Passkeys</h2>
@@ -536,6 +567,27 @@ export function dashboardRoutes(db, { devTokens, publicUrl = process.env.PUBLIC_
           });
         })();
         </script>`, { active: '/account', lead: 'How you sign in to this relay.' }));
+    },
+
+    'POST /account/password': async ({ req, res }) => {
+      const u = requireUser(req, res); if (!u) return;
+      const b = await readBody(req);
+      const row = q.pwGet.get(u.id);
+      const back = (why, bad = true) => html(res, bad ? 400 : 200, page('Account',
+        note(esc(why), bad) + '<div class="actions"><a class="btn" href="/account">Back</a></div>',
+        { active: '/account' }));
+
+      // The current password is required even though there is already a
+      // session: a borrowed unlocked browser should not be able to take the
+      // account over.
+      if (!row || !(await verifyPassword(String(b.current || ''), row.hash))) {
+        return back('That is not your current password.');
+      }
+      const problem = passwordProblem(String(b.next || ''));
+      if (problem) return back(problem);
+
+      q.pwSet.run(u.id, await hashPassword(String(b.next)), now());
+      back('Password changed.', false);
     },
 
     'POST /account/passkey/delete': async ({ req, res }) => {

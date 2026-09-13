@@ -9,6 +9,14 @@
    else can register.
 5. Check: `curl https://relay.inkagent.dev/health` → `{"ok":true}`.
 
+Locked out, or holding an account from before passwords existed? Set one from
+the host that has the database — it prompts, and never takes the password as an
+argument, because arguments land in shell history and the process list:
+
+```
+docker exec -it deploy-relay-1 node --experimental-sqlite src/setpw.js you@example.com
+```
+
 Caddy fetches and renews the Let's Encrypt certificate itself once DNS resolves.
 Update: rsync again, then `docker compose up -d --build` in `/opt/inkagent/deploy`.
 
