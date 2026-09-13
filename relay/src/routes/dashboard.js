@@ -122,6 +122,9 @@ a.btn-quiet{color:var(--ink);background:var(--paper)}
    how the panel fakes a tone it does not have. */
 .note{border-left:6px solid var(--ink);background:var(--paper);border-radius:0;
   padding:.75rem .9rem;margin:1.1rem 0}
+/* A confirmation is a quiet rule; a problem is dithered, so the two are
+   distinguishable at a glance without reaching for colour the panel lacks. */
+.note.done{border-left-width:3px;border-left-color:var(--l1);color:var(--l1);font-size:.9rem}
 .note.bad{border-left:6px solid transparent;
   border-image:repeating-linear-gradient(45deg,var(--ink) 0 3px,var(--paper) 3px 6px) 6}
 .note ul{margin:.4rem 0 0;padding-left:1.1rem}
@@ -172,7 +175,7 @@ const FAVICON = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' vi
 // each screen opened on a different kind of content (a list here, a form there,
 // a wall of JSON on the apps page) and the dashboard felt like separate tools
 // rather than one.
-const page = (title, body, { active = '', chrome = true, lead = '' } = {}) => `<!doctype html><meta charset="utf-8">
+const page = (title, body, { active = '', chrome = true, lead = '', flash = '' } = {}) => `<!doctype html><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
 <link rel="icon" href="${FAVICON}">
@@ -183,11 +186,29 @@ const page = (title, body, { active = '', chrome = true, lead = '' } = {}) => `<
 ${chrome
     ? `<nav>${NAV.map(([href, label]) => `<a href="${href}"${active === href ? ' aria-current="page"' : ''}>${label}</a>`).join('')}<span class="spacer"></span><a href="/logout">Sign out</a></nav>`
     : '<div style="height:1.25rem"></div>'}
-<h1>${esc(title)}</h1>${lead ? `<p class="lead">${lead}</p>` : '<div style="height:1rem"></div>'}${body}</div>`;
+<h1>${esc(title)}</h1>${lead ? `<p class="lead">${lead}</p>` : '<div style="height:1rem"></div>'}
+${flash ? `<div class="note done">${esc(flash)}</div>` : ''}${body}</div>`;
 
 // Failures render inside the page that caused them, with the form still filled
 // in, rather than on a dead-end page the user has to navigate back from.
 const note = (text, bad = false) => `<div class="note${bad ? ' bad' : ''}">${text}</div>`;
+
+// Every mutating action redirected in silence: rename a reader, connect a
+// model, remove an app, and the next page looked identical to the one before.
+// A line saying what happened is most of the difference between a set of forms
+// and something that feels like one place.
+const flashTo = (res, location, message) => {
+  res.writeHead(302, {
+    location,
+    'set-cookie': `ink_flash=${encodeURIComponent(message)}; Path=/; Max-Age=30; SameSite=Lax`,
+  });
+  res.end();
+};
+const takeFlash = (req) => {
+  const f = cookies(req).ink_flash;
+  return f ? decodeURIComponent(f) : '';
+};
+const CLEAR_FLASH = { 'set-cookie': 'ink_flash=; Path=/; Max-Age=0' };
 
 const sessionCookie = (sid) =>
   `ink_session=${sid}; Path=/; HttpOnly; SameSite=Lax${securePart()}`;
@@ -262,7 +283,7 @@ export function dashboardRoutes(db, { devTokens, publicUrl = process.env.PUBLIC_
   // validation failure never costs them their input.
   // The provider form, re-rendered with whatever the user last typed so a
   // validation failure never costs them their input.
-  const providerPage = (values, banner = '') => {
+  const providerPage = (values, banner = '', flash = '') => {
     const known = MODELS[values.kind] || [];
     const isCustom = values.model !== '' && !known.includes(values.model);
     const options = known.map(m => `<option value="${esc(m)}"${m === values.model ? ' selected' : ''}>${esc(m)}</option>`).join('') +
@@ -321,7 +342,7 @@ export function dashboardRoutes(db, { devTokens, publicUrl = process.env.PUBLIC_
         sel.addEventListener('change', toggleCustom);
       })();
       </script>`,
-      { active: '/provider', lead: 'Bring your own key, or point at an endpoint you run. Nothing here reaches your readers.' });
+      { active: '/provider', flash, lead: 'Bring your own key, or point at an endpoint you run. Nothing here reaches your readers.' });
   };
 
   return {
@@ -565,7 +586,7 @@ export function dashboardRoutes(db, { devTokens, publicUrl = process.env.PUBLIC_
             } catch (e) { msg.textContent = 'Passkey setup was cancelled or failed.'; }
           });
         })();
-        </script>`, { active: '/account', lead: 'How you sign in to this relay.' }));
+        </script>`, { active: '/account', lead: 'How you sign in to this relay.', flash: takeFlash(req) }), CLEAR_FLASH);
     },
 
     'POST /account/password': async ({ req, res }) => {
@@ -586,14 +607,14 @@ export function dashboardRoutes(db, { devTokens, publicUrl = process.env.PUBLIC_
       if (problem) return back(problem);
 
       q.pwSet.run(u.id, await hashPassword(String(b.next)), now());
-      back('Password changed.', false);
+      flashTo(res, '/account', 'Password changed.');
     },
 
     'POST /account/passkey/delete': async ({ req, res }) => {
       const u = requireUser(req, res); if (!u) return;
       const b = await readBody(req);
       q.credDelete.run(String(b.id || ''), u.id);
-      res.writeHead(302, { location: '/account' }); res.end();
+      flashTo(res, '/account', 'Passkey removed.');
     },
 
     'GET /logout': async ({ res }) => { res.writeHead(302, { location: '/login', 'set-cookie': 'ink_session=; Path=/; Max-Age=0' }); res.end(); },
@@ -674,16 +695,19 @@ export function dashboardRoutes(db, { devTokens, publicUrl = process.env.PUBLIC_
         ? 'Readers paired to this account.'
         : `${active.length} reader${active.length === 1 ? '' : 's'} paired · ${provider ? esc(provider.kind) : 'no model yet'} · ${appCount} app${appCount === 1 ? '' : 's'}`;
 
-      html(res, 200, page('Readers', setup + list, { active: '/devices', lead }));
+      html(res, 200, page('Readers', setup + list, { active: '/devices', lead, flash: takeFlash(req) }), CLEAR_FLASH);
     },
 
-    'POST /devices/rename': async ({ req, res }) => { const u = requireUser(req, res); if (!u) return; const b = await readBody(req); q.rename.run(String(b.name || '').slice(0, 40) || 'Reader', String(b.id), u.id); res.writeHead(302, { location: '/devices' }); res.end(); },
-    'POST /devices/revoke': async ({ req, res }) => { const u = requireUser(req, res); if (!u) return; const b = await readBody(req); q.revoke.run(String(b.id), u.id); res.writeHead(302, { location: '/devices' }); res.end(); },
+    'POST /devices/rename': async ({ req, res }) => { const u = requireUser(req, res); if (!u) return; const b = await readBody(req); const name = String(b.name || '').slice(0, 40) || 'Reader';
+      q.rename.run(name, String(b.id), u.id); flashTo(res, '/devices', `Renamed to ${name}.`); },
+    'POST /devices/revoke': async ({ req, res }) => { const u = requireUser(req, res); if (!u) return; const b = await readBody(req); const d = q.devices.all(u.id).find(x => x.id === String(b.id));
+      q.revoke.run(String(b.id), u.id);
+      flashTo(res, '/devices', `${d ? d.name : 'That reader'} was unpaired. Its token stopped working immediately.`); },
 
 
     'GET /apps': async ({ req, res }) => {
       const u = requireUser(req, res); if (!u) return;
-      html(res, 200, appsListPage(q.apps.all(u.id)));
+      html(res, 200, appsListPage(q.apps.all(u.id), takeFlash(req)), CLEAR_FLASH);
     },
 
     'GET /apps/edit': async ({ req, res, query }) => {
@@ -709,20 +733,21 @@ export function dashboardRoutes(db, { devTokens, publicUrl = process.env.PUBLIC_
       } else {
         q.appInsert.run(id(), u.id, result.meta.name, result.meta.icon, text, now());
       }
-      res.writeHead(302, { location: '/apps' }); res.end();
+      flashTo(res, '/apps', `${result.meta.name} saved. Your readers pick it up on the next sync.`);
     },
 
     'POST /apps/delete': async ({ req, res }) => {
       const u = requireUser(req, res); if (!u) return;
       const b = await readBody(req);
+      const app = q.appGet.get(String(b.id), u.id);
       q.appDelete.run(String(b.id), u.id);
-      res.writeHead(302, { location: '/apps' }); res.end();
+      flashTo(res, '/apps', `${app ? app.name : 'That app'} removed. It disappears from your readers on the next sync.`);
     },
 
     'GET /provider': async ({ req, res }) => {
       const u = requireUser(req, res); if (!u) return;
       const p = q.provGet.get(u.id) || { kind: 'groq', ...PRESETS.groq, api_key: '' };
-      html(res, 200, providerPage(p));
+      html(res, 200, providerPage(p, '', takeFlash(req)), CLEAR_FLASH);
     },
     'POST /provider': async ({ req, res, ctx }) => {
       const u = requireUser(req, res); if (!u) return;
@@ -753,13 +778,15 @@ export function dashboardRoutes(db, { devTokens, publicUrl = process.env.PUBLIC_
         try {
           const r = await chat({ baseUrl: base.toString(), apiKey: values.api_key || null, model: values.model, messages: [{ role: 'user', content: 'Reply with the single word: ready' }], maxTokens: 5, timeoutMs: 20000 });
           return html(res, 200, page('Your AI', `
-            ${note(`Saved and working. The model replied <code>${esc(r.text.trim())}</code>.`)}
-            <p><a href="/devices">Back to your readers</a></p>`, { active: '/provider' }));
+            ${note(`Saved and working. ${esc(values.model)} replied <code>${esc(r.text.trim())}</code>.`)}
+            <div class="actions"><a class="btn" href="/devices">Back to your readers</a>
+              <a class="btn-quiet" href="/provider">Change it</a></div>`,
+            { active: '/provider', lead: 'Your readers can ask this model now.' }));
         } catch (e) {
           return html(res, 200, providerPage(values, note(`Saved, but the test call failed: <code>${esc(e.message)}</code>`, true)));
         }
       }
-      res.writeHead(302, { location: '/devices' }); res.end();
+      flashTo(res, '/devices', `Connected ${values.kind}, using ${values.model}.`);
     },
 
     'GET /health': async ({ res }) => json(res, 200, { ok: true }),
@@ -770,7 +797,7 @@ export function dashboardRoutes(db, { devTokens, publicUrl = process.env.PUBLIC_
   // because an owner has a handful of these, not a catalogue.
   // The list. Previously this page also carried a fourteen-row textarea, so
   // "what have I installed" and "write an app" competed for the same screen.
-  function appsListPage(apps) {
+  function appsListPage(apps, flash = '') {
     const body = apps.length === 0
       ? `<div class="empty"><strong>No apps yet</strong>
          <p>An app is a small JSON file describing a screen. Your readers pick them up automatically.</p>
@@ -787,7 +814,7 @@ export function dashboardRoutes(db, { devTokens, publicUrl = process.env.PUBLIC_
         '<div class="actions"><a class="btn" href="/apps/edit">Add an app</a></div>';
 
     return page('Apps', body, {
-      active: '/apps',
+      active: '/apps', flash,
       lead: 'Screens your readers show. No firmware build, nothing to copy onto the card.',
     });
   }
