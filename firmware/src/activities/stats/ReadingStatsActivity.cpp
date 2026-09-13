@@ -16,11 +16,20 @@
 
 namespace {
 
-// The dashboard's three type sizes: a figure, a heading, and the small caps
-// under a figure saying what it is.
-constexpr int kFigureFont = NOTOSANS_18_FONT_ID;
-constexpr int kCardFont = NOTOSANS_16_FONT_ID;
-constexpr int kLabelFont = UI_10_FONT_ID;
+// One scale for both pages, with a rule behind it: numbers are set in Noto
+// Sans and words in the UI face, and each is used at exactly one size per
+// role. Three ranks of figure — the one the page is about, the ones in the
+// card row, the ones against a row label — and two of text, for a row's label
+// and for the small captions that say what a figure is.
+//
+// The point is that the book page and the library page are the same page with
+// different contents. A figure means the same thing, and is the same size, on
+// both.
+constexpr int kHeroFont = NOTOSANS_18_FONT_ID;   // the single number the page is about
+constexpr int kCardFont = NOTOSANS_14_FONT_ID;   // the rates under it
+constexpr int kValueFont = NOTOSANS_12_FONT_ID;  // a figure at the end of a row
+constexpr int kRowFont = UI_12_FONT_ID;          // a row's label
+constexpr int kLabelFont = UI_10_FONT_ID;        // captions, headings, units
 
 // Bars any narrower than this stop reading as a chart and start reading as
 // noise, so a narrow panel shows fewer days rather than thinner days.
@@ -39,6 +48,10 @@ std::string tenths(const uint32_t value) {
   readstats::formatTenths(value, buf, sizeof(buf));
   return buf;
 }
+
+// A figure the data cannot support yet. An em dash, not a zero: zero is a
+// measurement, and this is the absence of one.
+const char* kNoFigure = "\u2014";
 
 std::string number(const uint32_t n) {
   char buf[16];
@@ -94,6 +107,18 @@ void ReadingStatsActivity::build() {
   }
 }
 
+// Pages, and the two rates, in that order. Shared so the library page and a
+// book page cannot drift apart.
+std::vector<ReadingStatsActivity::Card> ReadingStatsActivity::rateCards(const uint32_t pages, const uint32_t ms) {
+  const uint32_t perMinute = readstats::pagesPerMinuteTenths(pages, ms);
+  const uint32_t perHour = readstats::pagesPerHour(pages, ms);
+  return {
+      {number(pages), tr(STR_STATS_PAGES)},
+      {perMinute == 0 ? kNoFigure : tenths(perMinute), tr(STR_STATS_PER_MIN)},
+      {perHour == 0 ? kNoFigure : number(perHour), tr(STR_STATS_PER_HR)},
+  };
+}
+
 void ReadingStatsActivity::buildForLibrary() {
   const int32_t today = halClock.dayNumber(SETTINGS.statusBarSpec().clockUtcOffsetQ);
   const auto& log = READING_STATS.days();
@@ -119,18 +144,15 @@ void ReadingStatsActivity::buildForLibrary() {
   }
   chartAside = std::string(tr(STR_STATS_WEEK)) + " " + duration(log.sum(today, 7) * 60u * 1000u);
 
-  cards.push_back({number(pages), tr(STR_STATS_PAGES)});
-  cards.push_back({tenths(readstats::pagesPerMinuteTenths(pages, totalMs)), tr(STR_STATS_PER_MIN)});
-  cards.push_back({number(readstats::pagesPerHour(pages, totalMs)), tr(STR_STATS_PER_HR)});
+  cards = rateCards(pages, totalMs);
 
   const auto books = READING_STATS.byRecency();
   if (!books.empty()) {
     rowsHeading = tr(STR_STATS_BOOKS);
     for (const BookStats* b : books) {
-      rows.push_back({b->title.empty() ? b->path : b->title, duration(b->readingMs), b->path, false});
+      rows.push_back({b->title.empty() ? b->path : b->title, duration(b->readingMs), b->path});
     }
   }
-  if (READING_STATS.totalSessions() > 0) rows.push_back({tr(STR_STATS_FORGET), "", "", true});
 }
 
 void ReadingStatsActivity::buildForBook(const BookStats& stats) {
@@ -149,21 +171,20 @@ void ReadingStatsActivity::buildForBook(const BookStats& stats) {
     asideLabel = tr(STR_STATS_READ);
   }
 
-  cards.push_back({number(stats.pages), tr(STR_STATS_PAGES)});
-  cards.push_back({tenths(readstats::pagesPerMinuteTenths(stats.pages, stats.readingMs)), tr(STR_STATS_PER_MIN)});
-  cards.push_back({number(stats.sessions), tr(STR_STATS_SITTINGS)});
+  // The same three cards as the library page, in the same order. A rate means
+  // the same thing on both, so it is read in the same place.
+  cards = rateCards(stats.pages, stats.readingMs);
 
-  const uint32_t perHour = readstats::pagesPerHour(stats.pages, stats.readingMs);
-  rows.push_back({tr(STR_STATS_PACE),
-                  perHour == 0 ? tr(STR_STATS_TOO_SOON) : number(perHour) + " " + tr(STR_STATS_PER_HOUR), "", false});
+  rowsHeading = tr(STR_STATS_DETAIL);
+  rows.push_back({tr(STR_STATS_SITTINGS), number(stats.sessions), ""});
   // Reported, never scored: going back over a paragraph is often the most
   // careful reading there is.
-  rows.push_back({tr(STR_STATS_REREAD), number(readstats::rereadPct(stats.pages, stats.regressions)) + "%", "", false});
+  rows.push_back({tr(STR_STATS_REREAD), number(readstats::rereadPct(stats.pages, stats.regressions)) + "%", ""});
 
   const std::string started = describeDay(stats.firstDay, today);
-  if (!started.empty()) rows.push_back({tr(STR_STATS_STARTED), started, "", false});
+  if (!started.empty()) rows.push_back({tr(STR_STATS_STARTED), started, ""});
   const std::string last = describeDay(stats.lastDay, today);
-  if (!last.empty()) rows.push_back({tr(STR_STATS_LAST_READ), last, "", false});
+  if (!last.empty()) rows.push_back({tr(STR_STATS_LAST_READ), last, ""});
 }
 
 // --- geometry ----------------------------------------------------------------
@@ -172,7 +193,7 @@ int ReadingStatsActivity::dashboardHeight() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   if (heroValue.empty()) return 0;
 
-  int height = renderer.getLineHeight(kLabelFont) + renderer.getLineHeight(kFigureFont) + metrics.verticalSpacing;
+  int height = renderer.getLineHeight(kLabelFont) + renderer.getLineHeight(kHeroFont) + metrics.verticalSpacing;
   if (!chart.empty()) height += kChartHeight + renderer.getLineHeight(kLabelFont) + metrics.verticalSpacing;
   if (progressPct >= 0) height += 8 + metrics.verticalSpacing;
   if (!cards.empty()) {
@@ -186,12 +207,21 @@ int ReadingStatsActivity::listTop() const {
   return metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + dashboardHeight();
 }
 
+// A row you can press is a touch target and takes the theme's list height. A
+// row that is only a figure is set from the type instead — at 44px a line of
+// twelve-point text sits in the middle of an empty band, and four of them read
+// as a list with things missing from it rather than as a block of detail.
+int ReadingStatsActivity::rowHeight() const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  if (selected >= 0) return std::max(1, metrics.listRowHeight);
+  return std::max(1, renderer.getLineHeight(kRowFont) + metrics.verticalSpacing);
+}
+
 int ReadingStatsActivity::visibleRows() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const int rowHeight = std::max(1, metrics.listRowHeight);
   const int heading = rowsHeading.empty() ? 0 : renderer.getLineHeight(kLabelFont) + metrics.verticalSpacing;
   const int space = renderer.getScreenHeight() - listTop() - heading - metrics.buttonHintsHeight;
-  return std::max(1, space / rowHeight);
+  return std::max(1, space / rowHeight());
 }
 
 // --- input -------------------------------------------------------------------
@@ -217,21 +247,6 @@ void ReadingStatsActivity::activateSelected() {
   if (selected < 0 || selected >= static_cast<int>(rows.size())) return;
   const Row& row = rows[selected];
 
-  if (row.forget) {
-    // Two presses, because this cannot be undone and the row sits at the
-    // bottom of a list people scroll to the end of.
-    if (!confirmingForget) {
-      confirmingForget = true;
-      requestUpdate();
-      return;
-    }
-    READING_STATS.clear();
-    confirmingForget = false;
-    build();
-    requestUpdate();
-    return;
-  }
-
   if (!row.path.empty()) {
     // Stacked, not replaced, so Back from a book returns to the library view
     // it was opened from.
@@ -244,24 +259,13 @@ void ReadingStatsActivity::loop() {
   Activity::loop();
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
-    if (confirmingForget) {
-      confirmingForget = false;
-      requestUpdate();
-      return;
-    }
     finish();
     return;
   }
   if (selected < 0) return;
 
-  buttonNavigator.onNext([this] {
-    confirmingForget = false;
-    moveSelection(1);
-  });
-  buttonNavigator.onPrevious([this] {
-    confirmingForget = false;
-    moveSelection(-1);
-  });
+  buttonNavigator.onNext([this] { moveSelection(1); });
+  buttonNavigator.onPrevious([this] { moveSelection(-1); });
 
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) activateSelected();
 }
@@ -280,12 +284,12 @@ int ReadingStatsActivity::drawHero(int y) const {
   }
   y += renderer.getLineHeight(kLabelFont);
 
-  renderer.drawText(kFigureFont, pad, y, heroValue.c_str());
+  renderer.drawText(kHeroFont, pad, y, heroValue.c_str());
   if (!asideValue.empty()) {
-    const int width = renderer.getTextWidth(kFigureFont, asideValue.c_str());
-    renderer.drawText(kFigureFont, right - width, y, asideValue.c_str());
+    const int width = renderer.getTextWidth(kHeroFont, asideValue.c_str());
+    renderer.drawText(kHeroFont, right - width, y, asideValue.c_str());
   }
-  return y + renderer.getLineHeight(kFigureFont) + metrics.verticalSpacing;
+  return y + renderer.getLineHeight(kHeroFont) + metrics.verticalSpacing;
 }
 
 int ReadingStatsActivity::drawChart(int y) const {
@@ -395,23 +399,29 @@ void ReadingStatsActivity::render(RenderLock&&) {
       y += renderer.getLineHeight(kLabelFont) + metrics.verticalSpacing;
     }
 
-    const int rowHeight = std::max(1, metrics.listRowHeight);
+    const int pitch = rowHeight();
     const int visible = visibleRows();
     for (int i = 0; i < visible && top + i < static_cast<int>(rows.size()); i++) {
       const Row& row = rows[top + i];
-      const int rowY = y + i * rowHeight;
+      const int rowY = y + i * pitch;
 
-      const char* label = (row.forget && confirmingForget) ? tr(STR_STATS_FORGET_PROMPT) : row.label.c_str();
       // Label left, figure right, so the numbers form a column the eye can run
-      // down instead of sitting wherever each label happens to end.
-      const int valueWidth = row.value.empty() ? 0 : renderer.getTextWidth(UI_12_FONT_ID, row.value.c_str());
+      // down instead of sitting wherever each label happens to end. The label
+      // is text and the value is a figure, so they take the two faces the scale
+      // assigns; both sit on the same top so the pair reads as one line.
+      const int valueWidth = row.value.empty() ? 0 : renderer.getTextWidth(kValueFont, row.value.c_str());
       const int labelRoom = pageWidth - pad * 2 - (valueWidth > 0 ? valueWidth + pad : 0);
-      const auto labelLines = renderer.wrappedText(UI_12_FONT_ID, label, labelRoom, 1);
-      if (!labelLines.empty()) renderer.drawText(UI_12_FONT_ID, pad, rowY, labelLines.front().c_str());
-      if (valueWidth > 0) renderer.drawText(UI_12_FONT_ID, pageWidth - pad - valueWidth, rowY, row.value.c_str());
+      const auto labelLines = renderer.wrappedText(kRowFont, row.label.c_str(), labelRoom, 1);
+      if (!labelLines.empty()) renderer.drawText(kRowFont, pad, rowY, labelLines.front().c_str());
+      if (valueWidth > 0) {
+        // Figure fonts and text fonts do not share a line height; matching the
+        // tops would leave the number floating, so match the baselines.
+        const int valueY = rowY + renderer.getFontAscenderSize(kRowFont) - renderer.getFontAscenderSize(kValueFont);
+        renderer.drawText(kValueFont, pageWidth - pad - valueWidth, valueY, row.value.c_str());
+      }
 
       if (top + i == selected) {
-        renderer.fillRect(pad, rowY + rowHeight - 6, pageWidth - pad * 2, 3);
+        renderer.fillRect(pad, rowY + pitch - 6, pageWidth - pad * 2, 3);
       }
     }
   }

@@ -64,8 +64,7 @@ bool ReadingStatsStore::fromJson(JsonVariantConst doc) {
 
 void ReadingStatsStore::recordSession(const std::string& path, const std::string& title, const std::string& author,
                                       const uint32_t readingMs, const uint32_t forwardTurns, const uint32_t regressions,
-                                      const int32_t day,
-                                      const bool newSitting) {
+                                      const int32_t day, const bool newSitting) {
   ensureLoaded();
   if (path.empty() || forwardTurns == 0 || readingMs == 0) return;
   // A session longer than the cap is the clock having moved, not an afternoon
@@ -132,12 +131,4 @@ std::vector<const BookStats*> ReadingStatsStore::byRecency() const {
     return a->readingMs > b->readingMs;
   });
   return out;
-}
-
-void ReadingStatsStore::clear() {
-  ensureLoaded();
-  books.clear();
-  dayLog = readstats::DayLog{};
-  lifetimeMs = lifetimePages = lifetimeSessions = 0;
-  if (!saveToFile()) LOG_ERR("ReadingStats", "could not clear");
 }

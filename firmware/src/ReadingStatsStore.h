@@ -82,10 +82,6 @@ class ReadingStatsStore : public PersistableStore<ReadingStatsStore> {
 
   // Books most recently read first — the order the stats screen lists them in.
   std::vector<const BookStats*> byRecency() const;
-
-  // Forgets everything. Offered because a reader who does not want their
-  // reading counted should be able to stop it having been counted.
-  void clear();
 };
 
 #define READING_STATS ReadingStatsStore::getInstance()

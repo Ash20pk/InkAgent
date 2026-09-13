@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
@@ -45,14 +46,13 @@ class ReadingStatsActivity final : public Activity {
     std::string label;
   };
 
-  // A line in the scrolling region below the dashboard: a book to open, the
-  // one destructive action, or a plain figure that cannot be selected.
+  // A line in the region below the dashboard: a book, which leads to its own
+  // page, or a plain figure that cannot be selected.
   struct Row {
     std::string label;
     std::string value;
     std::string path;
-    bool forget = false;
-    bool selectable() const { return !path.empty() || forget; }
+    bool selectable() const { return !path.empty(); }
   };
 
   std::string bookPath;
@@ -79,18 +79,20 @@ class ReadingStatsActivity final : public Activity {
   std::string rowsHeading;
   int selected = -1;  // -1 when nothing on the screen can be selected
   int top = 0;
-  bool confirmingForget = false;
   ButtonNavigator buttonNavigator;
 
   void build();
   void buildForBook(const struct BookStats& stats);
   void buildForLibrary();
+  // Pages and the two rates, identical on both pages.
+  static std::vector<Card> rateCards(uint32_t pages, uint32_t ms);
 
   // Height of the dashboard above the scrolling region, so both the renderer
   // and the row arithmetic agree on where the list starts.
   int dashboardHeight() const;
   int listTop() const;
   int visibleRows() const;
+  int rowHeight() const;
   void moveSelection(int delta);
   void activateSelected();
   std::string describeDay(int32_t day, int32_t today) const;
