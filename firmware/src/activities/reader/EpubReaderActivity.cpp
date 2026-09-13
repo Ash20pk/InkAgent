@@ -45,6 +45,7 @@
 #include "activities/settings/TextSettingsActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/RelayTask.h"
 #include "util/BookmarkUtil.h"
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
@@ -1573,6 +1574,51 @@ int EpubReaderActivity::sessionSpeedPct() const {
   // 25s baseline is 50% of normal pace.
   const uint32_t pct = (kBaselineMs * 100) / meanMs;
   return static_cast<int>(pct > 400 ? 400 : pct);
+}
+
+// Hands the passage the reader just left to the background task, if the reader
+// opted in. Everything is copied, so it is safe to call while this activity is
+// being torn down — the task will not touch anything here again.
+void EpubReaderActivity::onExit() {
+  // Queue before the base class tears anything down: this needs the section and
+  // the EPUB, and they are gone shortly after. The task waits for the heap they
+  // are holding before it opens TLS.
+  queueBackgroundRecall();
+  ReaderActivity::onExit();
+}
+
+void EpubReaderActivity::queueBackgroundRecall() {
+  if (!section || !epub) return;
+
+  std::string passage;
+  {
+    const std::string chapterText = section->getTextFromSectionFile();
+    if (chapterText.empty()) return;
+    const size_t focus = section->pageCount > 0
+                             ? (chapterText.size() * static_cast<size_t>(section->currentPage)) / section->pageCount
+                             : 0;
+    size_t start = 0;
+    const size_t n = inkagent::choosePassageWindow(chapterText.c_str(), chapterText.size(), focus,
+                                                   inkagent::kMaxPassageBytes, start);
+    passage.assign(chapterText, start, n);
+  }
+  if (passage.empty()) return;
+
+  const int tocIdx = epub->getTocIndexForSpineIndex(currentSpineIndex);
+  const std::string chapterName = (tocIdx >= 0) ? epub->getTocItem(tocIdx).title : "";
+  const std::string title = epub->getTitle();
+  const std::string author = epub->getAuthor();
+
+  inkagent::EngageRequest req;
+  req.app = "recall";
+  req.book = title.c_str();
+  req.author = author.c_str();
+  req.chapter = chapterName.c_str();
+  req.pct = bookPercentFor(chapterPosition());
+  req.text = passage.c_str();
+  req.regressions = static_cast<int>(sessionRegressions);
+  req.speedRatioPct = sessionSpeedPct();
+  RelayTask::submitRecall(req);
 }
 
 bool EpubReaderActivity::saveProgress(int spineIndex, int currentPage, int pageCount) {

@@ -133,6 +133,8 @@ class EpubReaderActivity final : public ReaderActivity {
   // Pace on this stretch as a percentage of the reader's own running average,
   // or -1 before there is enough of a baseline to divide by.
   int sessionSpeedPct() const;
+  void queueBackgroundRecall();
+  void onExit() override;
 
   bool saveProgress(int spineIndex, int currentPage, int pageCount);
   void jumpToPercent(int percent);

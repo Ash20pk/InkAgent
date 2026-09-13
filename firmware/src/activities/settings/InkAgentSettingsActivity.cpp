@@ -12,6 +12,7 @@
 #include "activities/util/KeyboardEntryActivity.h"
 #include "components/UITheme.h"
 #include "network/InkAgentClient.h"
+#include "network/RelayTask.h"
 
 namespace fui = freeink::ui;
 
@@ -79,6 +80,15 @@ void InkAgentSettingsActivity::syncApps() {
     // Said plainly rather than attempted and failed inside TLS, where the only
     // evidence would be a line in the SD log.
     syncStatus_ = tr(STR_SYNC_APPS_NO_MEMORY);
+    requestUpdate();
+    return;
+  }
+
+  // With the background task available, hand it over and return immediately:
+  // the screen stays live and the result lands on the card. Falls through to
+  // the blocking path only when the task never started.
+  if (RelayTask::submitAppSync()) {
+    syncStatus_ = tr(STR_SYNC_APPS_QUEUED);
     requestUpdate();
     return;
   }

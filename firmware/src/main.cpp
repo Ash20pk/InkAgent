@@ -38,6 +38,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "images/LoadingIcon.h"
+#include "network/RelayTask.h"
 #include "platform/UsbSerialJtagHandoff.h"
 #include "util/ButtonNavigator.h"
 #include "util/ScreenshotUtil.h"
@@ -500,6 +501,7 @@ void setup() {
   }
 
   LOG_DBG("MAIN", "Starting InkAgent version " INKAGENT_VERSION);
+  RelayTask::begin();
 
   // Resolve the single boot-presentation decision. Skipping the splash also
   // skips the panel-clearing pass and the X3 initial-full-sync arming (see

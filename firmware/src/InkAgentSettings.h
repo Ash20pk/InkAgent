@@ -284,6 +284,9 @@ class InkAgentSettings : public PersistableStore<InkAgentSettings> {
   // Long-press Confirm function in EPUB reader (cycles through LONG_PRESS_MENU_FUNCTION values).
   // Defaults to Disabled so shortcut-based bookmark toggling remains opt-in.
   uint8_t longPressMenuFunction = LP_MENU_DISABLED;
+  // Let the relay task fetch a question and sync apps on its own, after a
+  // reading session. Off by default: it uses the radio without being asked.
+  uint8_t agentBackgroundFetch = 0;
   // Sunlight fading compensation
   uint8_t fadingFix = 0;
   // Power button return from footnotes (1 = enabled, 0 = disabled)

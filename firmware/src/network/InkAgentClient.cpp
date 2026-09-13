@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "RelayCa.h"
+#include "RelayTask.h"
 #include "engage/AppCatalog.h"
 
 int InkAgentClient::lastHttpCode = 0;
@@ -32,6 +33,20 @@ void commonHeaders(freeink::SecureHttpClient& http, bool withToken) {
 // Sends `method` to relay + path. Returns HTTP status (<=0 on transport error)
 // and leaves the response body in `out` (bounded by SecureHttpClient).
 int request(const char* method, const char* path, const char* body, size_t len, bool withToken, std::string& out) {
+  // One TLS session at a time across the whole firmware. A foreground Ask and a
+  // background fetch each need ~40 KB, and this device does not have 80.
+  struct RelayLock {
+    bool held;
+    RelayLock() : held(RelayTask::acquireRelay(45000)) {}
+    ~RelayLock() {
+      if (held) RelayTask::releaseRelay();
+    }
+  } lock;
+  if (!lock.held) {
+    LOG_ERR("INKA", "%s: relay busy", path);
+    return -1;
+  }
+
   freeink::SecureHttpClient http;
 #if INKAGENT_RELAY_INSECURE
   // Escape hatch for pointing a dev build at a relay with a self-signed cert.
