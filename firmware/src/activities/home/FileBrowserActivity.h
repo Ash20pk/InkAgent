@@ -18,6 +18,7 @@ class FileBrowserActivity final : public UiListActivity {
   bool removeDirFile(const std::string& fullPath);
 
   Mode mode = Mode::Books;
+  bool returnOnRootBack = false;
 
   // Files state
   std::string basepath = "/";
@@ -61,8 +62,12 @@ class FileBrowserActivity final : public UiListActivity {
   size_t findEntry(const std::string& name) const;
 
  public:
+  // returnOnRootBack: Back at the root pops to whoever opened this instead of
+  // going Home. The drawer needs it — every other tile returns to the drawer,
+  // and Files should not be the one that drops you somewhere else. Home's own
+  // entry points leave it false and keep going Home.
   explicit FileBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialPath = "/",
-                               Mode mode = Mode::Books);
+                               Mode mode = Mode::Books, bool returnOnRootBack = false);
   void onEnter() override;
   void onExit() override;
 };

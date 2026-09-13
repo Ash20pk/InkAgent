@@ -78,6 +78,8 @@ const freeink::Icon& iconFor(const int index, const StrId label) {
       return icon_bookmark_32;
     case StrId::STR_READ_LATER:
       return icon_inbox_32;
+    case StrId::STR_BROWSE_FILES:
+      return icon_folder_32;
     case StrId::STR_FILE_TRANSFER:
       return icon_upload_32;
     case StrId::STR_PEER_SEND:
@@ -99,6 +101,7 @@ void AppDrawerActivity::onEnter() {
       {Target::WORD_LIST, StrId::STR_WORD_LIST},
       {Target::HIGHLIGHTS, StrId::STR_HIGHLIGHTS},
       {Target::READ_LATER, StrId::STR_READ_LATER},
+      {Target::FILE_BROWSER, StrId::STR_BROWSE_FILES},
       // Not a reading screen, but it is how the reading screens get fed: the
       // way books and articles arrive belongs next to where they land.
       {Target::FILE_TRANSFER, StrId::STR_FILE_TRANSFER},
@@ -280,6 +283,11 @@ void AppDrawerActivity::activate(const Target target) {
       break;
     case Target::READ_LATER:
       push(makeUniqueNoThrow<ReadLaterActivity>(renderer, mappedInput), "Read Later");
+      break;
+    case Target::FILE_BROWSER:
+      push(makeUniqueNoThrow<FileBrowserActivity>(renderer, mappedInput, std::string{},
+                                                  FileBrowserActivity::Mode::Books, /*returnOnRootBack=*/true),
+           "Files");
       break;
     case Target::FILE_TRANSFER:
       push(makeUniqueNoThrow<InkAgentWebServerActivity>(renderer, mappedInput), "File Transfer");

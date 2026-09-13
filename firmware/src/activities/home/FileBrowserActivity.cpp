@@ -28,9 +28,10 @@ std::string getFileName(std::string filename);
 std::string getFileExtension(const std::string& filename);
 
 FileBrowserActivity::FileBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
-                                         std::string initialPath, const Mode mode)
+                                         std::string initialPath, const Mode mode, const bool returnOnRootBack)
     : UiListActivity("FileBrowser", renderer, mappedInput, /*wantsTouchLongPress=*/true),
       mode(mode),
+      returnOnRootBack(returnOnRootBack),
       basepath(initialPath.empty() ? "/" : std::move(initialPath)) {}
 
 void FileBrowserActivity::loadFiles() {
@@ -387,6 +388,8 @@ bool FileBrowserActivity::handleButtons() {
         }
 
         requestUpdate();
+      } else if (returnOnRootBack) {
+        finish();
       } else if (mode == Mode::PickFirmware || mode == Mode::PickToSend) {
         // A picker at root cancels back to its caller instead of going home.
         ActivityResult res;
