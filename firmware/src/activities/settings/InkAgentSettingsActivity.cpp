@@ -7,6 +7,7 @@
 #include <memory>
 #include <string>
 
+#include "DataSentActivity.h"
 #include "InkAgentPairActivity.h"
 #include "MappedInputManager.h"
 #include "activities/util/KeyboardEntryActivity.h"
@@ -18,7 +19,8 @@ namespace fui = freeink::ui;
 
 namespace {
 const StrId menuNames[InkAgentSettingsActivity::MENU_ITEMS] = {StrId::STR_ASK_RELAY_URL, StrId::STR_ASK_PAIRING,
-                                                               StrId::STR_SYNC_APPS, StrId::STR_ASK_RESET_RELAY};
+                                                               StrId::STR_SYNC_APPS, StrId::STR_DATA_SENT,
+                                                               StrId::STR_ASK_RESET_RELAY};
 }  // namespace
 
 InkAgentSettingsActivity::InkAgentSettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput)
@@ -63,6 +65,9 @@ void InkAgentSettingsActivity::activateIndex(const int index) {
   } else if (index == 2) {
     syncApps();
   } else if (index == 3) {
+    startActivityForResult(std::make_unique<DataSentActivity>(renderer, mappedInput),
+                           [this](const ActivityResult&) { requestUpdate(); });
+  } else if (index == 4) {
     INKAGENT_STORE.setRelayUrl("");
     INKAGENT_STORE.clearPairing();
     INKAGENT_STORE.saveToFile();
@@ -134,9 +139,10 @@ void InkAgentSettingsActivity::buildScreen(UiScreen& screen) {
   rowItems_[1].label = INKAGENT_STORE.isPaired() ? tr(STR_ASK_UNPAIR) : tr(STR_ASK_PAIR_NOW);
   // Row 2: apps from the relay, with whatever the last sync reported.
   rowValues_[2] = syncStatus_;
-  rowValues_[3] = INKAGENT_DEFAULT_RELAY;
-  const auto defSchemeEnd = rowValues_[3].find("://");
-  if (defSchemeEnd != std::string::npos) rowValues_[3].erase(0, defSchemeEnd + 3);
+  rowValues_[3].clear();
+  rowValues_[4] = INKAGENT_DEFAULT_RELAY;
+  const auto defSchemeEnd = rowValues_[4].find("://");
+  if (defSchemeEnd != std::string::npos) rowValues_[4].erase(0, defSchemeEnd + 3);
 
   for (int i = 0; i < MENU_ITEMS; i++) rowItems_[i].value = rowValues_[i].empty() ? nullptr : rowValues_[i].c_str();
 
