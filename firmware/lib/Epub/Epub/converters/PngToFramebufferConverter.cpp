@@ -55,6 +55,11 @@ struct PngContext {
   int accumDstY{-1};
   int accumRows{0};
   bool boxFilter{false};
+
+  // Set when the source already carries no more tone than the panel resolves
+  // (1- or 2-bit greyscale). Dithering such a source re-quantises values that
+  // are already on the output lattice, which only adds noise.
+  bool sourceIsPreQuantized{false};
   uint32_t lastYieldMs{0};  // throttle state for yieldDuringDecode()
 };
 
@@ -223,6 +228,8 @@ void convertLineToGray(const uint8_t* pPixels, uint8_t* grayLine, int width, int
   }
 }
 
+bool ditherEnabled(const PngContext* ctx) { return ctx->config->useDithering && !ctx->sourceIsPreQuantized; }
+
 // Average the accumulated box for one output row, then dither and write it.
 void emitAccumulatedRow(PngContext* ctx) {
   const int rows = ctx->accumRows;
@@ -233,7 +240,7 @@ void emitAccumulatedRow(PngContext* ctx) {
   const int outY = ctx->config->y + dstY;
   if (outY < 0 || outY >= ctx->screenHeight) return;
 
-  const bool useDithering = ctx->config->useDithering;
+  const bool useDithering = ditherEnabled(ctx);
   DirectPixelWriter pw;
   pw.init(*ctx->renderer);
   const bool bwTarget = pw.mode == GfxRenderer::BW && useDithering;
@@ -361,7 +368,7 @@ int pngDrawCallback(PNGDRAW* pDraw) {
   int dstWidth = ctx->dstWidth;
   int outXBase = ctx->config->x;
   int screenWidth = ctx->screenWidth;
-  bool useDithering = ctx->config->useDithering;
+  bool useDithering = ditherEnabled(ctx);
 
   // Pre-compute orientation and render-mode state once per callback.
   DirectPixelWriter pw;
@@ -521,6 +528,10 @@ bool PngToFramebufferConverter::decodeToFramebuffer(const std::string& imagePath
 
   const int pixelType = png->getPixelType();
   const int bitsPerSample = png->getBpp();
+  ctx.sourceIsPreQuantized = pixelType == PNG_PIXEL_GRAYSCALE && bitsPerSample <= 2;
+  if (ctx.sourceIsPreQuantized) {
+    LOG_DBG("PNG", "Source is %d-bit greyscale: rendering without dithering", bitsPerSample);
+  }
   LOG_DBG("PNG", "PNG %dx%d (visible %dx%d) -> %dx%d (scale %.2f), type: %d, bpp: %d", ctx.srcWidth, ctx.srcHeight,
           ctx.visibleWidth, ctx.visibleHeight, ctx.dstWidth, ctx.dstHeight, ctx.scale, pixelType, bitsPerSample);
 

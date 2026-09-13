@@ -622,12 +622,10 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
   // Start streaming the pixel cache to disk. The band only needs to hold the
   // tallest single decode block: a JPEGDEC MCU cell is at most 16 scaled-source
   // rows tall, which our fine scale maps to this many output rows.
-  // The pixel cache streams raster bands of screen rows; a rotated image writes
-  // across those bands rather than along them, so it is decoded uncached.
-  ctx.caching = !config.cachePath.empty() && ctx.exifOrientation == 1;
-  if (!config.cachePath.empty() && !ctx.caching) {
-    LOG_DBG("JPG", "Skipping pixel cache: EXIF orientation %u", ctx.exifOrientation);
-  }
+  // Cache rows are image-space, not screen-space: the writer's coordinates cancel
+  // the placement origin, so a rotated image caches correctly and the rotation is
+  // reapplied by whoever renders those pixels back.
+  ctx.caching = !config.cachePath.empty();
   if (ctx.caching) {
     const int maxBlockDstRows = (int)(((int64_t)16 * ctx.fineScaleFPY) >> FP_SHIFT) + 2;
     if (!ctx.cache.begin(config.cachePath, destWidth, destHeight, config.x, config.y, maxBlockDstRows)) {
@@ -656,6 +654,10 @@ bool JpegToFramebufferConverter::decodeToFramebuffer(const std::string& imagePat
   }
 
   return true;
+}
+
+uint8_t JpegToFramebufferConverter::readOrientation(const std::string& imagePath) {
+  return readExifOrientation(imagePath);
 }
 
 bool JpegToFramebufferConverter::supportsFormat(const std::string& extension) {

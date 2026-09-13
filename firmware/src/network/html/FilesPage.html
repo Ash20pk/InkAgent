@@ -1559,7 +1559,7 @@
     <div class="upload-form">
       <p class="file-info">Select a file to upload to <strong id="uploadPathDisplay"></strong></p>
       <div class="drop-zone" id="dropZone">
-        <input type="file" id="fileInput" onchange="validateFile()" multiple>
+        <input type="file" id="fileInput" onchange="validateFile(); loadImageTonePreviewSource()" multiple>
         <p class="drop-zone-hint">⬇ Drop files here — or click to browse</p>
       </div>
       <div class="picker-columns" id="pickerColumns">
@@ -1595,13 +1595,33 @@
           <div class="advanced-setting-row">
             <div class="setting-label">
               <div class="setting-title">Optimize Images</div>
-              <div class="setting-desc">Resize photos to the screen and dither to black &amp; white (saved as .png)</div>
+              <div class="setting-desc">Resize photos to the screen and dither to the panel's 4 greys</div>
             </div>
-            <div class="setting-controls">
+            <div class="setting-controls" style="display:flex; align-items:center; gap:10px;">
+              <select id="imageFormatSelect" onchange="updateUploadSettingsPersistence()"
+                      title="XTH: the device's native page format, opens instantly. PNG: about half the size.">
+                <option value="xth">XTH (native)</option>
+                <option value="png">PNG (smaller)</option>
+              </select>
               <label class="toggle-switch">
                 <input type="checkbox" id="convertImagesToggle" onchange="updateUploadSettingsPersistence()">
                 <span class="toggle-slider"></span>
               </label>
+            </div>
+          </div>
+
+          <div class="advanced-setting-row" id="imageToneRow">
+            <div class="setting-label">
+              <div class="setting-title">Photo Brightness</div>
+              <div class="setting-desc">E-ink greys run dark; lift midtones until the preview matches the panel. <span id="imageToneValue"></span></div>
+              <input type="range" id="imageToneSlider" min="-50" max="50" step="5" value="20"
+                     style="width:100%; margin-top:6px;"
+                     oninput="onImageToneChanged()" onchange="updateUploadSettingsPersistence()">
+            </div>
+            <div class="setting-controls">
+              <canvas id="imageTonePreview" width="120" height="160"
+                      title="Preview of the first selected photo as the device will show it"
+                      style="border:1px solid #888; background:#fff; image-rendering:pixelated;"></canvas>
             </div>
           </div>
 
@@ -3371,6 +3391,8 @@ const DEFAULT_UPLOAD_SETTINGS = Object.freeze({
   convertBeforeUpload: false,
   renameFromMetadata: false,
   convertImages: true,
+  imageTone: 20,
+  imageFormat: 'xth',
   quality: DEFAULT_JPEG_QUALITY,
   autoCrop: DEFAULT_ENABLE_AUTO_CROP,
   deviceTarget: 'auto',
@@ -3385,6 +3407,8 @@ function getCurrentUploadSettings() {
     convertBeforeUpload: !!document.getElementById('convertBeforeUpload')?.checked,
     renameFromMetadata: !!document.getElementById('renameFromMetadataToggle')?.checked,
     convertImages: !!document.getElementById('convertImagesToggle')?.checked,
+    imageTone: parseInt(document.getElementById('imageToneSlider')?.value ?? 20, 10),
+    imageFormat: document.getElementById('imageFormatSelect')?.value === 'png' ? 'png' : 'xth',
     quality: parseInt(document.getElementById('qualitySlider')?.value || JPEG_QUALITY, 10),
     autoCrop: !!document.getElementById('autoCropToggle')?.checked,
     deviceTarget: DEVICE_TARGET,
@@ -3401,6 +3425,9 @@ function applyUploadSettings(settings = {}) {
     document.getElementById('convertBeforeUpload').checked = !!merged.convertBeforeUpload;
     document.getElementById('renameFromMetadataToggle').checked = !!merged.renameFromMetadata;
     document.getElementById('convertImagesToggle').checked = !!merged.convertImages;
+    document.getElementById('imageToneSlider').value = Math.max(-50, Math.min(50, parseInt(merged.imageTone, 10) || 0));
+    document.getElementById('imageFormatSelect').value = merged.imageFormat === 'png' ? 'png' : 'xth';
+    onImageToneChanged();
     document.getElementById('autoCropToggle').checked = !!merged.autoCrop;
     document.getElementById('export-log-checkbox').checked = !!merged.exportLog;
     document.getElementById('rememberUploadSettings').checked = !!settings.rememberSettings;
@@ -5676,8 +5703,10 @@ function getDeviceScreen() {
     deviceScreenPromise = fetch('/api/status')
       .then(r => r.ok ? r.json() : Promise.reject(new Error('status ' + r.status)))
       .then(j => {
-        const w = parseInt(j.screenWidth, 10);
-        const h = parseInt(j.screenHeight, 10);
+        // viewerWidth/Height exclude the viewer's button-hint bar; fall back to
+        // the raw screen on firmware that predates them.
+        const w = parseInt(j.viewerWidth ?? j.screenWidth, 10);
+        const h = parseInt(j.viewerHeight ?? j.screenHeight, 10);
         if (w > 0 && h > 0) return { width: w, height: h };
         throw new Error('device reported no screen size');
       })
@@ -5722,53 +5751,229 @@ function resizeToFit(source, targetW, targetH) {
   return out;
 }
 
-// Floyd-Steinberg error diffusion to pure black/white. Serpentine traversal
-// avoids the directional worm artefacts a left-to-right-only scan produces on
-// smooth gradients such as skies.
-function ditherToBlackWhite(imageData) {
+// The panel resolves four grey levels (black, light, dark, white), so quantise
+// to those rather than to pure black and white. Floyd-Steinberg diffuses the
+// residual, which reads as smooth tone instead of the coarse texture a plain
+// threshold gives.
+const DEVICE_GREY_LEVELS = 4;
+const GREY_STEP = 255 / (DEVICE_GREY_LEVELS - 1);  // 85
+
+// Slider -50..50 -> gamma exponent. The panel's four reflectances are not evenly
+// spaced (its "light" grey reads darker than 2/3 white), so on a linear lattice
+// midtones sink into "dark" and photos come out heavy. A gamma below 1 lifts the
+// midtones before quantisation; +20 (gamma ~0.76) is a sane default, and the
+// preview lets the user match the real panel by eye.
+function imageToneGamma() {
+  const slider = parseInt(document.getElementById('imageToneSlider')?.value ?? 20, 10) || 0;
+  return Math.pow(2, -slider / 50);
+}
+
+function onImageToneChanged() {
+  const label = document.getElementById('imageToneValue');
+  const v = parseInt(document.getElementById('imageToneSlider')?.value ?? 0, 10) || 0;
+  if (label) label.textContent = (v > 0 ? '+' : '') + v;
+  renderImageTonePreview();
+}
+
+// Returns a Uint8Array of level indices (0..3), one per pixel.
+function ditherToDeviceGreys(imageData, gamma = imageToneGamma()) {
   const { data, width, height } = imageData;
   const gray = new Float32Array(width * height);
 
+  // Tone LUT: BT.601 luma, then the gamma lift, precomputed per 8-bit value.
+  const toneLut = new Float32Array(256);
+  for (let v = 0; v < 256; v++) toneLut[v] = 255 * Math.pow(v / 255, gamma);
+
   for (let i = 0, p = 0; i < gray.length; i++, p += 4) {
-    // BT.601 luma: matches how the e-ink panel's contrast reads to the eye.
-    gray[i] = 0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2];
+    const luma = 0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2];
+    gray[i] = toneLut[Math.min(255, Math.max(0, Math.round(luma)))];
   }
 
+  const levels = new Uint8Array(width * height);
   for (let y = 0; y < height; y++) {
+    // Serpentine traversal: a left-to-right-only scan pushes error consistently
+    // one way and leaves directional worm artefacts across smooth gradients.
     const leftToRight = (y & 1) === 0;
     const xStart = leftToRight ? 0 : width - 1;
     const xEnd = leftToRight ? width : -1;
     const xStep = leftToRight ? 1 : -1;
-    const ahead = xStep;
 
     for (let x = xStart; x !== xEnd; x += xStep) {
       const i = y * width + x;
-      const oldValue = gray[i];
-      const newValue = oldValue < 128 ? 0 : 255;
-      const error = oldValue - newValue;
-      gray[i] = newValue;
+      let level = Math.round(gray[i] / GREY_STEP);
+      if (level < 0) level = 0;
+      if (level > DEVICE_GREY_LEVELS - 1) level = DEVICE_GREY_LEVELS - 1;
+      levels[i] = level;
 
+      const error = gray[i] - level * GREY_STEP;
       const hasAhead = leftToRight ? (x + 1 < width) : (x - 1 >= 0);
       const hasBehind = leftToRight ? (x - 1 >= 0) : (x + 1 < width);
-      if (hasAhead) gray[i + ahead] += error * 7 / 16;
+      if (hasAhead) gray[i + xStep] += error * 7 / 16;
       if (y + 1 < height) {
         const below = i + width;
-        if (hasBehind) gray[below - ahead] += error * 3 / 16;
+        if (hasBehind) gray[below - xStep] += error * 3 / 16;
         gray[below] += error * 5 / 16;
-        if (hasAhead) gray[below + ahead] += error * 1 / 16;
+        if (hasAhead) gray[below + xStep] += error * 1 / 16;
       }
     }
   }
-
-  for (let i = 0, p = 0; i < gray.length; i++, p += 4) {
-    const v = gray[i] < 128 ? 0 : 255;
-    data[p] = data[p + 1] = data[p + 2] = v;
-    data[p + 3] = 255;
-  }
-  return imageData;
+  return levels;
 }
 
-// Returns a converted PNG File, or null if the image is already device-ready.
+// --- Minimal 2-bit greyscale PNG encoder ---------------------------------
+// Canvas only encodes 8-bit RGBA, which would hand the device a file it cannot
+// tell apart from a photograph and would re-dither. A 2-bit greyscale PNG says
+// "this already has exactly the tone the panel shows", which the firmware reads
+// from the bit depth and renders straight through. It is also ~4x smaller.
+
+const CRC_TABLE = (() => {
+  const table = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    table[n] = c >>> 0;
+  }
+  return table;
+})();
+
+function crc32(bytes) {
+  let c = 0xFFFFFFFF;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+
+function pngChunk(type, payload) {
+  const out = new Uint8Array(12 + payload.length);
+  const view = new DataView(out.buffer);
+  view.setUint32(0, payload.length);
+  for (let i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
+  out.set(payload, 8);
+  const crcInput = out.subarray(4, 8 + payload.length);
+  view.setUint32(8 + payload.length, crc32(crcInput));
+  return out;
+}
+
+async function encodeTwoBitGreyPng(levels, width, height) {
+  // Each scanline is a filter byte (0 = None) followed by 4 pixels per byte.
+  const bytesPerRow = (width + 3) >> 2;
+  const raw = new Uint8Array((bytesPerRow + 1) * height);
+  let o = 0;
+  for (let y = 0; y < height; y++) {
+    raw[o++] = 0;
+    const rowStart = y * width;
+    for (let x = 0; x < width; x++) {
+      raw[o + (x >> 2)] |= (levels[rowStart + x] & 0x03) << (6 - (x & 3) * 2);
+    }
+    o += bytesPerRow;
+  }
+
+  // PNG expects a zlib stream, which is what CompressionStream('deflate') emits.
+  const compressed = new Uint8Array(await new Response(
+    new Blob([raw]).stream().pipeThrough(new CompressionStream('deflate'))
+  ).arrayBuffer());
+
+  const ihdr = new Uint8Array(13);
+  const ihdrView = new DataView(ihdr.buffer);
+  ihdrView.setUint32(0, width);
+  ihdrView.setUint32(4, height);
+  ihdr[8] = 2;   // bit depth
+  ihdr[9] = 0;   // colour type 0 = greyscale
+  ihdr[10] = 0;  // deflate
+  ihdr[11] = 0;  // adaptive filtering
+  ihdr[12] = 0;  // no interlace
+
+  return new Blob([
+    new Uint8Array([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
+    pngChunk('IHDR', ihdr),
+    pngChunk('IDAT', compressed),
+    pngChunk('IEND', new Uint8Array(0)),
+  ], { type: 'image/png' });
+}
+
+// Live preview: first selected photo, downscaled and dithered with the current
+// tone, painted with the panel's four greys so what you see is what the device
+// gets. Cheap enough to run on every slider tick at 120px wide.
+let imageTonePreviewBitmap = null;
+let imageTonePreviewToken = 0;
+
+async function loadImageTonePreviewSource() {
+  const files = Array.from(document.getElementById('fileInput')?.files || []);
+  const first = files.find(f => IMAGE_UPLOAD_EXT.test(f.name));
+  if (imageTonePreviewBitmap) { imageTonePreviewBitmap.close(); imageTonePreviewBitmap = null; }
+  if (!first) { renderImageTonePreview(); return; }
+  const token = ++imageTonePreviewToken;
+  try {
+    const bmp = await createImageBitmap(first, { imageOrientation: 'from-image' });
+    if (token !== imageTonePreviewToken) { bmp.close(); return; }
+    imageTonePreviewBitmap = bmp;
+  } catch (e) {
+    console.warn('[Image] Preview decode failed:', e.message);
+  }
+  renderImageTonePreview();
+}
+
+function renderImageTonePreview() {
+  const canvas = document.getElementById('imageTonePreview');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const bmp = imageTonePreviewBitmap;
+  if (!bmp) {
+    ctx.fillStyle = '#999';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('select a photo', canvas.width / 2, canvas.height / 2);
+    return;
+  }
+  const scale = Math.min(canvas.width / bmp.width, canvas.height / bmp.height, 1);
+  const w = Math.max(1, Math.floor(bmp.width * scale));
+  const h = Math.max(1, Math.floor(bmp.height * scale));
+  const small = resizeToFit(bmp, w, h);
+  const levels = ditherToDeviceGreys(small.getContext('2d').getImageData(0, 0, w, h));
+  const out = ctx.createImageData(w, h);
+  for (let i = 0, p = 0; i < levels.length; i++, p += 4) {
+    const v = levels[i] * GREY_STEP;
+    out.data[p] = out.data[p + 1] = out.data[p + 2] = v;
+    out.data[p + 3] = 255;
+  }
+  ctx.putImageData(out, Math.floor((canvas.width - w) / 2), Math.floor((canvas.height - h) / 2));
+}
+
+// --- XTH encoder ---------------------------------------------------------
+// The device's native single-page format (see lib/Xtc/Xtc/XtcTypes.h): a
+// 22-byte header, then two bit planes stored column-major, columns right to
+// left, 8 vertical pixels per byte with bit 7 the topmost. XTH values are
+// 0=white 1=dark 2=light 3=black - the inverse of the levels the ditherer
+// produces at the ends, identical in the middle. Uncompressed, so it costs
+// about twice the bytes of the 2-bit PNG but opens with no decode at all.
+function encodeXth(levels, width, height) {
+  const planeBytes = (width * height + 7) >> 3;
+  const out = new Uint8Array(22 + 2 * planeBytes);
+  const view = new DataView(out.buffer);
+  view.setUint32(0, 0x00485458, true);  // "XTH\0"
+  view.setUint16(4, width, true);
+  view.setUint16(6, height, true);
+  out[8] = 0;                            // colour mode
+  out[9] = 0;                            // compression: none
+  view.setUint32(10, 2 * planeBytes, true);
+  // bytes 14..21: md5 (optional) left zero
+
+  const p1 = 22, p2 = 22 + planeBytes;
+  let i = 0;
+  for (let x = width - 1; x >= 0; x--) {
+    for (let y = 0; y < height; y++, i++) {
+      const l = levels[y * width + x];
+      const v = l === 0 ? 3 : l === 3 ? 0 : l;
+      const bit = 0x80 >> (i & 7);
+      if (v & 2) out[p1 + (i >> 3)] |= bit;
+      if (v & 1) out[p2 + (i >> 3)] |= bit;
+    }
+  }
+  return new Blob([out], { type: 'application/octet-stream' });
+}
+
+// Returns a converted File, or null if the image is already device-ready.
 async function convertImageForDevice(file) {
   const screen = await getDeviceScreen();
 
@@ -5791,16 +5996,14 @@ async function convertImageForDevice(file) {
     const canvas = resizeToFit(bitmap, targetW, targetH);
     const ctx = canvas.getContext('2d');
     const imageData = ctx.getImageData(0, 0, targetW, targetH);
-    ctx.putImageData(ditherToBlackWhite(imageData), 0, 0);
+    const levels = ditherToDeviceGreys(imageData);
+    const asPng = document.getElementById('imageFormatSelect')?.value === 'png';
+    const blob = asPng ? await encodeTwoBitGreyPng(levels, targetW, targetH) : encodeXth(levels, targetW, targetH);
 
-    const blob = await new Promise((resolve, reject) => {
-      canvas.toBlob(b => b ? resolve(b) : reject(new Error('PNG encoding failed')), 'image/png');
-    });
-
-    const newName = file.name.replace(IMAGE_UPLOAD_EXT, '') + '.png';
+    const newName = file.name.replace(IMAGE_UPLOAD_EXT, '') + (asPng ? '.png' : '.xth');
     console.log(`[Image] ${file.name}: ${bitmap.width}x${bitmap.height} ${formatBytes(file.size)} -> ` +
-                `${targetW}x${targetH} ${formatBytes(blob.size)}`);
-    return new File([blob], newName, { type: 'image/png', lastModified: file.lastModified });
+                `${targetW}x${targetH} ${formatBytes(blob.size)} ${asPng ? 'PNG' : 'XTH'}`);
+    return new File([blob], newName, { type: blob.type, lastModified: file.lastModified });
   } finally {
     bitmap.close();
   }

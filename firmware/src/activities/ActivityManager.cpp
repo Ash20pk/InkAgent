@@ -268,7 +268,8 @@ void ActivityManager::goToReader(std::string path, const bool allowFastInitialRe
     return;
   }
 
-  if (FsHelpers::hasBmpExtension(path) || FsHelpers::hasPngExtension(path) || FsHelpers::hasJpgExtension(path)) {
+  if (FsHelpers::hasBmpExtension(path) || FsHelpers::hasPngExtension(path) || FsHelpers::hasJpgExtension(path) ||
+      FsHelpers::hasXthExtension(path)) {
     auto activity = makeUniqueNoThrow<BmpViewerActivity>(renderer, mappedInput, std::move(path));
     if (!activity) {
       LOG_ERR("ACT", "OOM: bitmap viewer activity");

@@ -2119,7 +2119,20 @@ int GfxRenderer::getLineHeight(const int fontId) const {
 }
 
 int GfxRenderer::getLineHeight(const int fontId, const float compression) const {
-  return static_cast<int>(getLineHeight(fontId) * compression + 0.5f);
+  const int natural = getLineHeight(fontId);
+  int compressed = static_cast<int>(natural * compression + 0.5f);
+  // advanceY carries ascender + descender + the font's line gap, so compressing
+  // it eats the gap first - which is the point. Past that it starts eating the
+  // glyphs themselves and ascenders collide with the descenders above. Floor the
+  // result at the ink extent so any compression value stays legible; a font
+  // whose metrics do not report an extent keeps the uncompressed height.
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt != fontMap.end()) {
+    const auto* data = fontIt->second.getData(EpdFontFamily::REGULAR);
+    const int inkExtent = data->ascender - data->descender;
+    if (inkExtent > 0 && compressed < inkExtent) compressed = inkExtent;
+  }
+  return compressed;
 }
 
 int GfxRenderer::getTextHeight(const int fontId) const {

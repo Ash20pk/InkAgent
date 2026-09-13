@@ -21,6 +21,7 @@
 #include "SettingsList.h"
 #include "WebDAVHandler.h"
 #include "WifiCredentialStore.h"
+#include "components/UITheme.h"
 #include "html/FilesPageHtml.generated.h"
 #include "html/FontsPageHtml.generated.h"
 #include "html/HomePageHtml.generated.h"
@@ -424,6 +425,13 @@ void InkAgentWebServer::handleStatus() const {
       SETTINGS.orientation == InkAgentSettings::PORTRAIT || SETTINGS.orientation == InkAgentSettings::INVERTED;
   doc["screenWidth"] = portrait ? std::min(panelW, panelH) : std::max(panelW, panelH);
   doc["screenHeight"] = portrait ? std::max(panelW, panelH) : std::min(panelW, panelH);
+  // The image viewer keeps its button hints outside the picture, so clients
+  // should size to this smaller box to avoid an on-device downscale.
+  const int hints = UITheme::getInstance().getMetrics().buttonHintsHeight;
+  const int screenW = portrait ? std::min(panelW, panelH) : std::max(panelW, panelH);
+  const int screenH = portrait ? std::max(panelW, panelH) : std::min(panelW, panelH);
+  doc["viewerWidth"] = portrait ? screenW : screenW - hints;
+  doc["viewerHeight"] = portrait ? screenH - hints : screenH;
 #if FREEINK_DEVICE_X4 || FREEINK_DEVICE_X3
   doc["device"] = gpio.deviceIsX3() ? "X3" : "X4";
 #else

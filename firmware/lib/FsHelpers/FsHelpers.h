@@ -33,6 +33,9 @@ inline bool hasJpgExtension(const String& fileName) {
 
 // Check for .png extension (case-insensitive)
 bool hasPngExtension(std::string_view fileName);
+// Standalone Xteink page images (.xth 2-bit / .xtg 1-bit), e.g. the stock
+// firmware's "Pushed Images". Distinct from the .xtc/.xtch book containers.
+bool hasXthExtension(std::string_view fileName);
 inline bool hasPngExtension(const String& fileName) {
   return hasPngExtension(std::string_view{fileName.c_str(), fileName.length()});
 }
