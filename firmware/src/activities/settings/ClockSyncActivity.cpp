@@ -124,6 +124,17 @@ void ClockSyncActivity::render(RenderLock&&) {
         char line[64];
         snprintf(line, sizeof(line), "%s %s", tr(STR_CURRENT_TIME), syncedTime);
         renderer.drawCenteredText(UI_10_FONT_ID, midY + 10, line);
+
+        // The RTC is set to UTC and the offset is applied when the time is
+        // shown, so a fresh device reports the right instant in the wrong zone
+        // and the sync looks broken. Naming the offset in use makes a wrong one
+        // obvious here, where the reader is already looking at a clock.
+        const int quarters = static_cast<int>(SETTINGS.clockUtcOffsetQ) - 48;
+        const int mins = quarters * 15;
+        char zone[80];
+        snprintf(zone, sizeof(zone), "%s UTC%+d:%02d — %s", tr(STR_CLOCK_SHOWN_IN), mins / 60,
+                 (mins < 0 ? -mins : mins) % 60, tr(STR_CLOCK_OFFSET_WHERE));
+        renderer.drawCenteredText(SMALL_FONT_ID, midY + 10 + renderer.getLineHeight(UI_10_FONT_ID) + 4, zone);
       }
       break;
     }

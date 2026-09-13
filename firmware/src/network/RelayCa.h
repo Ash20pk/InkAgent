@@ -1,34 +1,38 @@
 #pragma once
 
-// Trust anchor for the InkAgent relay.
+// Trust anchors for the InkAgent relay.
 //
 // relay.inkagent.dev is served by Caddy with a Let's Encrypt certificate. The
-// whole served chain is ECDSA:
+// served chain is entirely ECDSA and four deep:
 //
 //   relay.inkagent.dev  <-  Let's Encrypt YE2  <-  ISRG Root YE  <-  ISRG Root X2
 //
-// So the anchor is ISRG Root X2, self-signed, P-384. Trusting it verifies the
-// chain using the intermediates the server already sends.
+// where that last ISRG Root X2 is the copy cross-signed by ISRG Root X1.
 //
-// ISRG Root X1 was pinned here too and had to be removed. It is RSA-4096, it is
-// only reachable via the X2 cross-certificate, and it is not needed: X2 alone
-// validates the live chain. Carrying it made the device do RSA-4096 work during
-// the handshake, where wolfSSL is built with FP_MAX_BITS 8192 and a small
-// stack, so each fast-math temporary is ~2 KB — against a largest free block of
-// around 39 KB once TLS is up. Pairing failed with wolfSSL -188
-// (ASN_NO_SIGNER_E) as a result: no usable signer.
+// Both roots are pinned, and both are needed. OpenSSL validates this chain
+// against X2 alone because it will build an alternate path and stop early at a
+// trusted self-signed root. wolfSSL does not do that by default: it walks the
+// chain exactly as presented, so the cross-signed X2 must itself verify, and
+// that requires X1. Trusting X2 on its own produces a handshake failure with
+// wolfSSL -188, ASN_NO_SIGNER_E.
 //
-// Pin the root, never the leaf or the intermediate: leaves rotate every sixty
-// days and Let's Encrypt rotates intermediates on its own schedule, so pinning
+// X1 is RSA-4096 and was briefly removed on the theory that it was too
+// expensive for this device. It was not: the failure at the time was the
+// device's clock, which made every certificate look not-yet-valid, and the
+// SDK ignored the load error so it surfaced later as a missing signer.
+//
+// Pin roots, never the leaf or the intermediate: leaves rotate every sixty days
+// and Let's Encrypt rotates intermediates on its own schedule, so pinning
 // either would brick the AI feature on a device nobody is updating.
 //
 // If Let's Encrypt stops chaining to an ISRG root, this needs updating in a
-// release before the change lands. Check what is actually served with:
+// release before the change lands. Check what is served with:
 //   openssl s_client -connect relay.inkagent.dev:443 -showcerts
-// and confirm the anchor still validates it:
-//   openssl verify -CAfile x2.pem -untrusted <intermediates> <leaf>
+// and confirm the last chain certificate verifies against these anchors:
+//   openssl verify -CAfile <these two> <last chain cert>
 //
-// ISRG Root X2 expires 2040-09-17.
+// X2 expires 2040-09-17, X1 expires 2035-06-04. X2 is first so the anchor that
+// does the real work is loaded before the larger one.
 
 namespace inkagent {
 
@@ -46,6 +50,37 @@ inline constexpr char kRelayRootCAs[] =
     "zj0EAwMDaAAwZQIwe3lORlCEwkSHRhtFcP9Ymd70/aTSVaYgLXTWNLxBo1BfASdW\n"
     "tL4ndQavEi51mI38AjEAi/V3bNTIZargCyzuFJ0nN6T5U6VR5CmD1/iQMVtCnwr1\n"
     "/q4AaOeMSQ+2b1tbFfLn\n"
+    "-----END CERTIFICATE-----\n"
+    "-----BEGIN CERTIFICATE-----\n"
+    "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\n"
     "-----END CERTIFICATE-----\n";
 
 }  // namespace inkagent
