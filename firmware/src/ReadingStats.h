@@ -87,6 +87,20 @@ inline uint32_t pagesPerHour(const uint32_t pages, const uint32_t ms) {
   return static_cast<uint32_t>((static_cast<uint64_t>(pages) * 3600000 + ms / 2) / ms);
 }
 
+// Pages a minute, in tenths — 12 means 1.2. Reading runs at one or two pages
+// a minute, so whole numbers would round almost every reader to the same
+// figure and the tenth is the part that moves.
+inline uint32_t pagesPerMinuteTenths(const uint32_t pages, const uint32_t ms) {
+  if (pages == 0 || ms < 60000) return 0;
+  return static_cast<uint32_t>((static_cast<uint64_t>(pages) * 600000 + ms / 2) / ms);
+}
+
+// "1.4", from tenths.
+inline void formatTenths(const uint32_t tenths, char* out, const size_t n) {
+  if (out == nullptr || n == 0) return;
+  snprintf(out, n, "%u.%u", static_cast<unsigned>(tenths / 10), static_cast<unsigned>(tenths % 10));
+}
+
 // Mean seconds on a page. Zero when nothing has been turned.
 inline uint32_t secondsPerPage(const uint32_t pages, const uint32_t ms) {
   if (pages == 0) return 0;

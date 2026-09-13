@@ -13,9 +13,17 @@
 // than usual for you; the totals were used once and thrown away. This is the
 // same measurement, kept and shown.
 //
-// Two ways in, one screen. From the drawer it opens on everything — the whole
-// library, most recently read first — and a book row leads to that book alone.
-// From a book's own menu it opens straight on that book.
+// Laid out as a dashboard rather than a list of figures: one number at the top
+// that answers "how much have I read", a four-week bar chart underneath it
+// because a shape shows a habit in a way a total never can, then the rates in
+// a row, then the books. The chart is why this is worth the screen — twenty-
+// eight bars cost almost nothing to draw and say what twenty-eight numbers
+// could not.
+//
+// Two ways in. From the drawer it opens on everything, most recently read
+// first, and a book row leads to that book alone. From a book's own menu it
+// opens straight on that book, where the chart is replaced by how far through
+// it you are.
 //
 // There is no goal here, no target, no quota, nothing to fail and nothing that
 // notifies. A device that argues reading should not be gamified cannot then
@@ -31,11 +39,17 @@ class ReadingStatsActivity final : public Activity {
   void render(RenderLock&&) override;
 
  private:
+  // A figure and what it is, in the row under the chart.
+  struct Card {
+    std::string value;
+    std::string label;
+  };
+
+  // A line in the scrolling region below the dashboard: a book to open, the
+  // one destructive action, or a plain figure that cannot be selected.
   struct Row {
     std::string label;
     std::string value;
-    // Set on the rows that lead somewhere: a book, or the one destructive
-    // action. Everything else is a figure to read and cannot be selected.
     std::string path;
     bool forget = false;
     bool selectable() const { return !path.empty() || forget; }
@@ -43,7 +57,26 @@ class ReadingStatsActivity final : public Activity {
 
   std::string bookPath;
   std::string bookTitle;
+
+  // --- the dashboard, built once on entry ------------------------------------
+  std::string heroValue;   // total time, large
+  std::string heroLabel;   // what it is, small, above it
+  std::string asideValue;  // streak, or how far through the book
+  std::string asideLabel;
+  std::vector<Card> cards;
+  // Daily minutes, oldest first, for the library view's chart. Empty in the
+  // book view, which shows progress instead — daily totals are kept for the
+  // device, not per book.
+  std::vector<uint16_t> chart;
+  uint16_t chartPeak = 0;
+  std::string chartCaption;
+  std::string chartAside;
+  // 0-100, or -1 when this book has no known position. Book view only.
+  int progressPct = -1;
+
+  // --- the scrolling region --------------------------------------------------
   std::vector<Row> rows;
+  std::string rowsHeading;
   int selected = -1;  // -1 when nothing on the screen can be selected
   int top = 0;
   bool confirmingForget = false;
@@ -52,9 +85,20 @@ class ReadingStatsActivity final : public Activity {
   void build();
   void buildForBook(const struct BookStats& stats);
   void buildForLibrary();
+
+  // Height of the dashboard above the scrolling region, so both the renderer
+  // and the row arithmetic agree on where the list starts.
+  int dashboardHeight() const;
+  int listTop() const;
   int visibleRows() const;
   void moveSelection(int delta);
   void activateSelected();
-  // "today", "yesterday", "6 days ago", or empty when the device had no clock.
   std::string describeDay(int32_t day, int32_t today) const;
+
+  // Each returns the y it finished at, so the bands stack without any of them
+  // knowing what came before.
+  int drawHero(int y) const;
+  int drawChart(int y) const;
+  int drawProgress(int y) const;
+  int drawCards(int y) const;
 };

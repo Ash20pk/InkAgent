@@ -119,6 +119,25 @@ TEST(Rates, PagesPerHourRoundsAndRefusesTinySamples) {
   EXPECT_EQ(readstats::pagesPerHour(2, 30 * 1000), 0u) << "half a minute says nothing about an hour";
 }
 
+TEST(Rates, PagesPerMinuteKeepsTheTenth) {
+  EXPECT_EQ(readstats::pagesPerMinuteTenths(60, kHour), 10u) << "a page a minute";
+  EXPECT_EQ(readstats::pagesPerMinuteTenths(84, kHour), 14u) << "1.4, and the .4 is the part that moves";
+  EXPECT_EQ(readstats::pagesPerMinuteTenths(30, kHour), 5u) << "0.5";
+  EXPECT_EQ(readstats::pagesPerMinuteTenths(0, kHour), 0u);
+  EXPECT_EQ(readstats::pagesPerMinuteTenths(2, 30 * 1000), 0u) << "half a minute is not a rate";
+}
+
+TEST(Format, Tenths) {
+  char buf[8];
+  readstats::formatTenths(14, buf, sizeof(buf));
+  EXPECT_STREQ(buf, "1.4");
+  readstats::formatTenths(5, buf, sizeof(buf));
+  EXPECT_STREQ(buf, "0.5");
+  readstats::formatTenths(120, buf, sizeof(buf));
+  EXPECT_STREQ(buf, "12.0");
+  readstats::formatTenths(14, nullptr, 0);  // must not crash
+}
+
 TEST(Rates, SecondsPerPage) {
   EXPECT_EQ(readstats::secondsPerPage(60, kHour), 60u);
   EXPECT_EQ(readstats::secondsPerPage(0, kHour), 0u);
