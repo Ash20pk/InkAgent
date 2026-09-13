@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "WordSchedule.h"
+
 // Words looked up while reading, and when to show them again.
 //
 // The evidence this exists for: words met once in context are mostly forgotten,
@@ -39,11 +41,8 @@ class WordListStore : public PersistableStore<WordListStore> {
   friend class PersistableStore<WordListStore>;
 
  public:
-  // Expanding lags, in days. Five successful retrievals carry a word out to two
-  // months, which is where the vocabulary studies put durable retention.
-  static constexpr int32_t BOX_DAYS[5] = {1, 3, 7, 21, 60};
-  static constexpr uint8_t BOX_COUNT = 5;
-  static constexpr uint8_t kRetired = BOX_COUNT;
+  // The rule itself lives in WordSchedule.h, free of storage and the clock.
+  static constexpr uint8_t kRetired = wordsched::RETIRED;
   // Bounded on purpose: this whole vector is resident while the app is open,
   // and an unbounded list would quietly become the largest allocation on a
   // 380 KB device.

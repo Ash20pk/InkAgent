@@ -64,3 +64,4 @@ add_subdirectory(fs_helpers)
 
 add_subdirectory(absolute_grayscale)
 add_subdirectory(ink_agent)
+add_subdirectory(word_schedule)
