@@ -2121,6 +2121,14 @@ int GfxRenderer::getTextAdvanceX(const int fontId, const char* text, EpdFontFami
   return widthPx;
 }
 
+int GfxRenderer::getGlyphHeight(const int fontId, const uint32_t codepoint,
+                                const EpdFontFamily::Style style) const {
+  const auto fontIt = fontMap.find(fontId);
+  if (fontIt == fontMap.end()) return 0;
+  const EpdGlyph* glyph = fontIt->second.getGlyph(codepoint, style);
+  return glyph ? glyph->height : 0;
+}
+
 int GfxRenderer::getFontAscenderSize(const int fontId) const {
   const auto fontIt = fontMap.find(fontId);
   if (fontIt == fontMap.end()) {

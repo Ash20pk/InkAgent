@@ -98,16 +98,20 @@ void BaseTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t
 }
 
 BaseTheme::BatteryIconSize BaseTheme::batteryIconSize(const GfxRenderer& renderer) {
-  // A digit is about the font's ascender tall, so an icon of that height reads
-  // as the same size as the number beside it. The outline needs a two-pixel
-  // border, a fill and a nub, and the charging bolt is eight rows, so it stops
-  // shrinking at eleven.
+  // Measure the digit, not the font. The ascender is the maximum extent above
+  // the baseline over every glyph in the face — accents included — so for
+  // notosans_8 it reads 18, which is exactly the header battery's height and
+  // half again taller than a digit actually is. Sizing to it changed nothing.
   const int ascender = renderer.getFontAscenderSize(SMALL_FONT_ID);
-  const int height = std::max(11, ascender);
-  // The stock 26x18 proportions, kept so the icon still looks like a battery.
+  const int digit = renderer.getGlyphHeight(SMALL_FONT_ID, '0');
+  // The outline needs a border, a fill row and a nub, and the charging bolt is
+  // eight rows tall, so the icon stops shrinking at eleven however small the
+  // font gets.
+  const int height = std::max(11, digit > 0 ? digit : ascender);
+  // The stock 26x18 proportions, kept so it still reads as a battery.
   const int width = std::max(16, height * 26 / 18);
-  // Sitting the icon's bottom on the text baseline puts its cap where the
-  // digits' cap is; anything else reads as one of them having slipped.
+  // The icon's bottom sits on the text baseline, which is `ascender` rows below
+  // the top of the line box the caller positioned the text with.
   return {width, height, std::max(0, ascender - height)};
 }
 

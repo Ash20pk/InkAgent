@@ -314,6 +314,11 @@ class GfxRenderer {
   int getKerning(int fontId, uint32_t leftCp, uint32_t rightCp, EpdFontFamily::Style style) const;
   int getTextAdvanceX(int fontId, const char* text, EpdFontFamily::Style style) const;
   int getFontAscenderSize(int fontId) const;
+  // Bitmap height of one glyph, in pixels. The ascender is the font's maximum
+  // extent above the baseline — accents and all — so it is far taller than a
+  // digit and useless for sizing something to sit beside one. This measures the
+  // glyph that will actually be drawn.
+  int getGlyphHeight(int fontId, uint32_t codepoint, EpdFontFamily::Style style = EpdFontFamily::REGULAR) const;
   int getLineHeight(int fontId) const;
   int getLineHeight(int fontId, float compression) const;
   std::string truncatedText(int fontId, const char* text, int maxWidth,
