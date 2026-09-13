@@ -40,10 +40,14 @@ int drawScreenBody(GfxRenderer& renderer, const Screen& screen, const int startY
         constexpr int fontId = UI_12_FONT_ID;
         const int lineHeight = renderer.getLineHeight(fontId);
         const auto style = row.bold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
+        // The prefix rides with the value, so it disappears when the value does
+        // and never labels an empty line.
+        char line[kMaxTextBytes * 2];
+        snprintf(line, sizeof(line), "%s%s", row.prefix, row.a);
         if (row.centered) {
-          UITheme::drawCenteredText(renderer, Rect{0, y, pageWidth, lineHeight}, fontId, y, row.a, true, style);
+          UITheme::drawCenteredText(renderer, Rect{0, y, pageWidth, lineHeight}, fontId, y, line, true, style);
         } else {
-          renderer.drawText(fontId, labelX, y, row.a, true, style);
+          renderer.drawText(fontId, labelX, y, line, true, style);
         }
         y += lineHeight + gap;
         break;

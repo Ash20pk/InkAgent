@@ -66,6 +66,7 @@ bool parseScreen(const char* json, const size_t len, const GfxRenderer& renderer
     switch (row.kind) {
       case RowKind::Text:
         resolveField(entry["text"], renderer, row.a, sizeof(row.a));
+        resolveField(entry["prefix"], renderer, row.prefix, sizeof(row.prefix));
         break;
       case RowKind::Kv:
         resolveField(entry["label"], renderer, row.a, sizeof(row.a));

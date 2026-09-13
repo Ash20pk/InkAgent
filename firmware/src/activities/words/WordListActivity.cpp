@@ -4,10 +4,12 @@
 #include <HalClock.h>
 #include <I18n.h>
 #include <Logging.h>
+#include <Memory.h>
 
 #include <algorithm>
 
 #include "WordListStore.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 
@@ -89,16 +91,21 @@ void WordListActivity::renderReview(const bool revealed) const {
                               tr(STR_WORD_RECALL_PROMPT));
   }
 
-  const int left = static_cast<int>(queue.size() - queueIndex);
-  char remaining[24];
-  snprintf(remaining, sizeof(remaining), "%d", left);
+  // A bare digit floating above the hints reads as an error code. Say what it
+  // counts, and say nothing at all on the last one.
+  const int left = static_cast<int>(queue.size() - queueIndex) - 1;
+  char remaining[32];
+  if (left > 0) {
+    snprintf(remaining, sizeof(remaining), "%d %s", left, tr(STR_WORD_MORE_AFTER));
+  } else {
+    remaining[0] = '\0';
+  }
   const int countY = pageHeight - metrics.buttonHintsHeight - renderer.getLineHeight(UI_10_FONT_ID) * 2;
   UITheme::drawCenteredText(renderer, Rect{0, countY, pageWidth, renderer.getLineHeight(UI_10_FONT_ID)}, UI_10_FONT_ID,
                             countY, remaining);
 
-  const auto labels = revealed
-                          ? mappedInput.mapLabels(tr(STR_BACK), tr(STR_WORD_KNEW), tr(STR_WORD_FORGOT), "")
-                          : mappedInput.mapLabels(tr(STR_BACK), tr(STR_WORD_REVEAL), "", "");
+  const auto labels = revealed ? mappedInput.mapLabels(tr(STR_BACK), tr(STR_WORD_KNEW), tr(STR_WORD_FORGOT), "")
+                               : mappedInput.mapLabels(tr(STR_BACK), tr(STR_WORD_REVEAL), "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
 }
@@ -127,8 +134,8 @@ void WordListActivity::renderBrowse() const {
                         tr(STR_WORD_LEARNED));
     }
     if (browseTop + i == browseIndex) {
-      renderer.fillRect(metrics.contentSidePadding, rowY + rowHeight - 6,
-                        pageWidth - metrics.contentSidePadding * 2, 3);
+      renderer.fillRect(metrics.contentSidePadding, rowY + rowHeight - 6, pageWidth - metrics.contentSidePadding * 2,
+                        3);
     }
   }
 
@@ -207,8 +214,7 @@ void WordListActivity::loop() {
       const auto& metrics = UITheme::getInstance().getMetrics();
       const int rowHeight = std::max(1, metrics.listRowHeight);
       const int top = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
-      const int visible =
-          std::max(1, (renderer.getScreenHeight() - top - metrics.buttonHintsHeight) / rowHeight);
+      const int visible = std::max(1, (renderer.getScreenHeight() - top - metrics.buttonHintsHeight) / rowHeight);
 
       buttonNavigator.onNext([this, count, visible] {
         browseIndex = ButtonNavigator::nextIndex(browseIndex, count);
@@ -225,12 +231,21 @@ void WordListActivity::loop() {
       if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
         const auto& all = WORD_LIST.getWords();
         if (browseIndex >= 0 && browseIndex < static_cast<int>(all.size())) {
+          // Forgetting a word is not undoable and the list is the only copy,
+          // so it asks first, like removing a book from recents does.
           const std::string victim = all[browseIndex].word;
-          WORD_LIST.removeWord(victim);
-          browseIndex = std::min(browseIndex, WORD_LIST.count() - 1);
-          if (browseIndex < 0) browseIndex = 0;
-          browseTop = std::min(browseTop, browseIndex);
-          requestUpdate();
+          startActivityForResult(
+              makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_WORD_FORGET_PROMPT), victim),
+              [this, victim](const ActivityResult& result) {
+                if (!result.isCancelled) {
+                  WORD_LIST.removeWord(victim);
+                  browseIndex = std::min(browseIndex, WORD_LIST.count() - 1);
+                  if (browseIndex < 0) browseIndex = 0;
+                  browseTop = std::min(browseTop, browseIndex);
+                  if (WORD_LIST.count() == 0) mode = Mode::Done;
+                }
+                requestUpdate();
+              });
         }
       }
       break;

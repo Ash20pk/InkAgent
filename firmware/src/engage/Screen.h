@@ -33,6 +33,9 @@ struct Row {
   bool centered = false;
   // Trailing gap, in multiples of the theme's verticalSpacing.
   uint8_t gapAfter = 1;
+  // Literal shown ahead of `a`, and only when `a` resolved to something. Lets
+  // an optional row carry its own label without the format needing a branch.
+  char prefix[kMaxTextBytes] = {0};
   char a[kMaxTextBytes] = {0};  // Text: the line. Kv: the label.
   char b[kMaxTextBytes] = {0};  // Kv: the resolved value.
 };
