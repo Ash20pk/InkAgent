@@ -277,6 +277,18 @@ class BaseTheme {
 
   // Shared constants and helpers for battery drawing (used by all themes)
   static constexpr int batteryPercentSpacing = 4;
+  // The reader's status-bar battery, sized from the font it sits beside rather
+  // than from a fixed metric. The theme's batteryWidth/Height are tuned for the
+  // header, where the icon stands alone; in the reader it sits next to a line
+  // of SMALL_FONT digits, and at 26x18 it stood a third taller than they did.
+  struct BatteryIconSize {
+    int width;
+    int height;
+    // Rows from the top of the text's line box to the top of the icon, so the
+    // icon's cap and baseline line up with the digits' rather than the box's.
+    int offsetY;
+  };
+  static BatteryIconSize batteryIconSize(const GfxRenderer& renderer);
   static void drawBatteryOutline(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight);
   static void drawBatteryLightningBolt(const GfxRenderer& renderer, int boltX, int boltY);
 };

@@ -97,18 +97,33 @@ void BaseTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t
   }
 }
 
+BaseTheme::BatteryIconSize BaseTheme::batteryIconSize(const GfxRenderer& renderer) {
+  // A digit is about the font's ascender tall, so an icon of that height reads
+  // as the same size as the number beside it. The outline needs a two-pixel
+  // border, a fill and a nub, and the charging bolt is eight rows, so it stops
+  // shrinking at eleven.
+  const int ascender = renderer.getFontAscenderSize(SMALL_FONT_ID);
+  const int height = std::max(11, ascender);
+  // The stock 26x18 proportions, kept so the icon still looks like a battery.
+  const int width = std::max(16, height * 26 / 18);
+  // Sitting the icon's bottom on the text baseline puts its cap where the
+  // digits' cap is; anything else reads as one of them having slipped.
+  return {width, height, std::max(0, ascender - height)};
+}
+
 void BaseTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bool showPercentage) const {
   // Left aligned: icon on left, percentage on right (reader mode)
   const uint16_t percentage = powerManager.getBatteryPercentage();
-  const int y = rect.y + 6;
+  const BatteryIconSize icon = batteryIconSize(renderer);
+  const int y = rect.y + icon.offsetY;
 
   if (showPercentage) {
     const auto percentageText = std::to_string(percentage) + "%";
-    renderer.drawText(SMALL_FONT_ID, rect.x + batteryPercentSpacing + rect.width, rect.y, percentageText.c_str());
+    renderer.drawText(SMALL_FONT_ID, rect.x + batteryPercentSpacing + icon.width, rect.y, percentageText.c_str());
   }
 
-  const Rect iconRect{rect.x, y, rect.width, rect.height};
-  drawBatteryOutline(renderer, rect.x, y, rect.width, rect.height);
+  const Rect iconRect{rect.x, y, icon.width, icon.height};
+  drawBatteryOutline(renderer, rect.x, y, icon.width, icon.height);
   fillBatteryIcon(renderer, iconRect, percentage);
 }
 
@@ -823,7 +838,10 @@ void BaseTheme::drawStatusBar(GfxRenderer& renderer, const float bookProgress, c
     GUI.drawBatteryLeft(renderer,
                         Rect{leftClusterX + leftClusterWidth, textY, metrics.batteryWidth, metrics.batteryHeight},
                         showBatteryPercentage);
-    int batteryWidth = metrics.batteryWidth;
+    // What was actually drawn, not the theme metric: drawBatteryLeft sizes the
+    // icon to the font, and laying out against the old width would leave the
+    // percentage floating away from it.
+    int batteryWidth = batteryIconSize(renderer).width;
 
     if (showBatteryPercentage) {
       const uint16_t percentage = powerManager.getBatteryPercentage();

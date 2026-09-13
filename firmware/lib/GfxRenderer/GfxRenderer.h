@@ -46,6 +46,7 @@ class GfxRenderer {
   mutable bool absoluteGrayPlanes = false;
   Orientation orientation;
   bool fadingFix;
+  int textEmboldenPx = 0;
   uint8_t* frameBuffer = nullptr;
   uint16_t panelWidth = HalDisplay::DISPLAY_WIDTH;
   uint16_t panelHeight = HalDisplay::DISPLAY_HEIGHT;
@@ -189,6 +190,14 @@ class GfxRenderer {
 
   // Fading fix control
   void setFadingFix(const bool enabled) { fadingFix = enabled; }
+
+  // Stem darkening: every black glyph is blitted a second time one pixel along
+  // the writing direction, thickening the strokes without changing the metrics,
+  // so a line still breaks in exactly the same place. This is what makes text
+  // read as darker on a panel with no backlight — the alternative, the bold
+  // face, is a different design with wider glyphs and it reflows the page.
+  void setTextEmbolden(const int pixels) { textEmboldenPx = pixels < 0 ? 0 : (pixels > 2 ? 2 : pixels); }
+  int getTextEmbolden() const { return textEmboldenPx; }
 
   // Screen ops
   int getScreenWidth() const;

@@ -231,6 +231,12 @@ class InkAgentSettings : public PersistableStore<InkAgentSettings> {
   // Text rendering settings
   uint8_t extraParagraphSpacing = 0;  // default off: tighter paragraphs
   uint8_t textAntiAliasing = 1;
+  // Stem darkening for the reading page, in pixels (0 = off). E-ink has no
+  // backlight and a panel that has warmed up or aged renders a hairline serif
+  // grey rather than black; a pixel of extra stroke is the difference between
+  // legible and squinting, and unlike the bold face it does not change any
+  // glyph's width, so the page breaks in exactly the same places.
+  uint8_t readerTextWeight = 0;
   // Short power button click behaviour
   uint8_t shortPwrBtn = GO_HOME;  // short power press opens Home; long press still sleeps
   // EPUB reading orientation settings

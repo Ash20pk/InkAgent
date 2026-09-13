@@ -293,6 +293,10 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
         SettingInfo::Toggle(StrId::STR_TEXT_AA, &InkAgentSettings::textAntiAliasing, "textAntiAliasing",
                             StrId::STR_CAT_READER)
             .withTextSettings(),
+        SettingInfo::Enum(StrId::STR_TEXT_WEIGHT, &InkAgentSettings::readerTextWeight,
+                          {StrId::STR_TEXT_WEIGHT_NORMAL, StrId::STR_TEXT_WEIGHT_DARK, StrId::STR_TEXT_WEIGHT_DARKEST},
+                          "readerTextWeight", StrId::STR_CAT_READER)
+            .withTextSettings(),
         SettingInfo::Enum(StrId::STR_IMAGES, &InkAgentSettings::imageRendering,
                           {StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_PLACEHOLDER, StrId::STR_IMAGES_SUPPRESS},
                           "imageRendering", StrId::STR_CAT_READER),

@@ -445,7 +445,7 @@ static void renderCharScaled(const GfxRenderer& renderer, GfxRenderer::RenderMod
 }
 
 template <TextRotation rotation = TextRotation::None>
-static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode renderMode,
+static void renderCharOnce(const GfxRenderer& renderer, GfxRenderer::RenderMode renderMode,
                            const EpdFontFamily& fontFamily, const uint32_t cp, int cursorX, int cursorY,
                            const bool pixelState, const EpdFontFamily::Style style) {
   if (renderer.grayPlanesAreAbsolute()) renderMode = GfxRenderer::BW;
@@ -626,6 +626,29 @@ void GfxRenderer::drawCenteredText(const int fontId, const int y, const char* te
                                    const EpdFontFamily::Style style, const BidiUtils::BidiBaseDir baseDir) const {
   const int x = (getScreenWidth() - getTextWidth(fontId, text, style, baseDir)) / 2;
   drawText(fontId, x, y, text, black, style, baseDir);
+}
+
+// One glyph, blitted once or — with stem darkening on — twice, the second pass
+// a pixel along the writing direction. Doing it here rather than by drawing the
+// whole string twice means the shaping, kerning and glyph lookup happen once;
+// only the bitmap goes down again.
+//
+// Erasures are never doubled: a white glyph widened by a pixel would eat into
+// whatever sits beside it.
+template <TextRotation rotation = TextRotation::None>
+static void renderCharImpl(const GfxRenderer& renderer, GfxRenderer::RenderMode renderMode,
+                           const EpdFontFamily& fontFamily, const uint32_t cp, int cursorX, int cursorY,
+                           const bool pixelState, const EpdFontFamily::Style style) {
+  renderCharOnce<rotation>(renderer, renderMode, fontFamily, cp, cursorX, cursorY, pixelState, style);
+  const int embolden = renderer.getTextEmbolden();
+  if (embolden <= 0 || !pixelState) return;
+  for (int step = 1; step <= embolden; step++) {
+    if constexpr (rotation == TextRotation::None) {
+      renderCharOnce<rotation>(renderer, renderMode, fontFamily, cp, cursorX + step, cursorY, pixelState, style);
+    } else {
+      renderCharOnce<rotation>(renderer, renderMode, fontFamily, cp, cursorX, cursorY + step, pixelState, style);
+    }
+  }
 }
 
 void GfxRenderer::drawText(const int fontId, const int x, const int y, const char* text, const bool black,

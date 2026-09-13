@@ -192,6 +192,25 @@ inline void displayBaseWithRefreshCycle(const GfxRenderer& renderer, int& pagesU
   }
 }
 
+// Stem darkening, on for the length of a scope and off again after.
+//
+// Scoped to the page body on purpose. The status bar sits in SMALL_FONT, and a
+// pixel of extra stroke on a seven-pixel digit closes its counters and turns
+// "88%" into two blobs. The body text is where the reader's eyes are and where
+// the weight is worth having.
+class TextWeightScope {
+ public:
+  TextWeightScope(GfxRenderer& renderer, const int pixels) : renderer(renderer) {
+    renderer.setTextEmbolden(pixels);
+  }
+  ~TextWeightScope() { renderer.setTextEmbolden(0); }
+  TextWeightScope(const TextWeightScope&) = delete;
+  TextWeightScope& operator=(const TextWeightScope&) = delete;
+
+ private:
+  GfxRenderer& renderer;
+};
+
 // Grayscale anti-aliasing pass. Renders content twice (LSB + MSB) to build
 // the grayscale buffer. Only the content callback is re-rendered — status bars
 // and other overlays should be drawn before calling this.

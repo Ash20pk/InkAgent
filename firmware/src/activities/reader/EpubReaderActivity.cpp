@@ -1232,13 +1232,17 @@ void EpubReaderActivity::renderBook() {
 
   const uint8_t statusBarHeight = UITheme::getInstance().getStatusBarHeight();
 
+  // The status bar and the margin are both reserved, not one or the other. The
+  // max() this used to be meant that as soon as the bar was taller than the
+  // margin — which it is at every margin setting below 35 — the last line of
+  // text sat directly on top of the bar with nothing between them, and the
+  // margin the reader had chosen did nothing at the foot of the page.
   if (automaticPageTurnActive &&
       (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight())) {
-    orientedMarginBottom +=
-        std::max(SETTINGS.screenMargin,
-                 static_cast<uint8_t>(statusBarHeight + UITheme::getInstance().getMetrics().statusBarVerticalMargin));
+    orientedMarginBottom += statusBarHeight + UITheme::getInstance().getMetrics().statusBarVerticalMargin +
+                            SETTINGS.screenMargin;
   } else {
-    orientedMarginBottom += std::max(SETTINGS.screenMargin, statusBarHeight);
+    orientedMarginBottom += statusBarHeight + SETTINGS.screenMargin;
   }
 
   const uint16_t viewportWidth = renderer.getScreenWidth() - orientedMarginLeft - orientedMarginRight;
@@ -1691,7 +1695,10 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
 
   auto* fcm = renderer.getFontCacheManager();
   auto scope = fcm->createPrewarmScope();
-  page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+  {
+    ReaderUtils::TextWeightScope weight(renderer, SETTINGS.readerTextWeight);
+    page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+  }
   // Scan the status bar too: a CJK book/chapter title redirected to the SD
   // fallback font joins the page's single batch prewarm instead of triggering
   // its own SD pass after the scope ends.
@@ -1726,6 +1733,7 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   const bool overlapRefresh = tiledGrayscale && grayscale.asyncBase && !pageHasImages;
   auto renderGrayscalePass = [&]() {
     if (absoluteImageGrayscale || needsTextGrayscale) {
+      ReaderUtils::TextWeightScope weight(renderer, SETTINGS.readerTextWeight);
       page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
     } else {
       page->renderImages(renderer, fontId, orientedMarginLeft, orientedMarginTop);
@@ -1734,13 +1742,19 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   };
 
   if (pageHasImagesNeedingDecode) {
-    page->renderWithImagePlaceholders(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+    {
+      ReaderUtils::TextWeightScope weight(renderer, SETTINGS.readerTextWeight);
+      page->renderWithImagePlaceholders(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+    }
     renderStatusBar();
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     renderer.clearScreen();
   }
 
-  page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+  {
+    ReaderUtils::TextWeightScope weight(renderer, SETTINGS.readerTextWeight);
+    page->render(renderer, fontId, orientedMarginLeft, orientedMarginTop);
+  }
   renderStatusBar();
   const auto tBwRender = millis();
 
