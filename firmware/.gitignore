@@ -35,3 +35,6 @@ lib/I18n/I18nStrings.h
 open-x4-sdk
 platformio.local.ini
 sdkconfig.sticky
+
+# Internal planning doc, not for the public repo
+docs/ROADMAP.md
