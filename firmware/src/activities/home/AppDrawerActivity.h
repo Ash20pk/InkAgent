@@ -25,6 +25,7 @@ class AppDrawerActivity : public Activity {
     FILE_BROWSER,
     RECENTS,
     WORD_LIST,
+    HIGHLIGHTS,
     OPDS_BROWSER,
     FILE_TRANSFER,
     WIFI,

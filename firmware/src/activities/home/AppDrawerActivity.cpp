@@ -7,6 +7,7 @@
 
 #include "OpdsServerStore.h"
 #include "activities/browser/OpdsBookBrowserActivity.h"
+#include "activities/highlights/HighlightsActivity.h"
 #include "activities/home/FileBrowserActivity.h"
 #include "activities/home/RecentBooksActivity.h"
 #include "activities/network/CalibreConnectActivity.h"
@@ -65,6 +66,8 @@ const freeink::Icon& iconFor(const int index, const StrId label) {
       return icon_sun_32;
     case StrId::STR_WORD_LIST:
       return icon_words_32;
+    case StrId::STR_HIGHLIGHTS:
+      return icon_bookmark_32;
     case StrId::STR_USB_DRIVE:
       return icon_usb_32;
     case StrId::STR_CALIBRE_WIRELESS:
@@ -91,6 +94,7 @@ void AppDrawerActivity::onEnter() {
       {Target::FILE_BROWSER, StrId::STR_BROWSE_FILES},
       {Target::RECENTS, StrId::STR_MENU_RECENT_BOOKS},
       {Target::WORD_LIST, StrId::STR_WORD_LIST},
+      {Target::HIGHLIGHTS, StrId::STR_HIGHLIGHTS},
   };
   if (OPDS_STORE.hasServers()) entries.push_back({Target::OPDS_BROWSER, StrId::STR_OPDS_BROWSER});
   entries.push_back({Target::FILE_TRANSFER, StrId::STR_FILE_TRANSFER});
@@ -257,6 +261,9 @@ void AppDrawerActivity::activate(const Target target) {
       break;
     case Target::WORD_LIST:
       push(makeUniqueNoThrow<WordListActivity>(renderer, mappedInput), "Word List");
+      break;
+    case Target::HIGHLIGHTS:
+      push(makeUniqueNoThrow<HighlightsActivity>(renderer, mappedInput), "Highlights");
       break;
     case Target::OPDS_BROWSER: {
       // Mirrors goToBrowser(): a single configured server skips the picker.
