@@ -10,6 +10,7 @@
 #include <HalGPIO.h>
 #include <HalStorage.h>
 #include <I18n.h>
+#include <InkAgentProtocol.h>
 #include <Logging.h>
 #include <Memory.h>
 #include <esp_system.h>
@@ -21,27 +22,26 @@
 
 #include "../../util/BookmarkFile.h"
 #include "BookmarkEntry.h"
-#include "InkAgentSettings.h"
-#include "InkAgentState.h"
 #include "DictionaryWordSelectActivity.h"
 #include "EpubReaderBookmarksActivity.h"
 #include "EpubReaderChapterSelectionActivity.h"
 #include "EpubReaderFootnotesActivity.h"
 #include "EpubReaderPercentSelectionActivity.h"
 #include "EpubReaderUtils.h"
+#include "InkAgentSettings.h"
+#include "InkAgentState.h"
 #include "KOReaderCredentialStore.h"
 #include "KOReaderSyncActivity.h"
 #include "MappedInputManager.h"
 #include "ProgressMapper.h"
 #include "QrDisplayActivity.h"
-#include "activities/agent/AskBookActivity.h"
-#include <InkAgentProtocol.h>
 #include "ReaderActivity.h"
 #include "ReaderFontSizes.h"
 #include "ReaderToolbarUi.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
+#include "activities/agent/AskBookActivity.h"
 #include "activities/settings/TextSettingsActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
@@ -1595,8 +1595,13 @@ void EpubReaderActivity::renderContents(std::unique_ptr<Page> page, const int or
   const bool cleanImageBasePending = manualRefreshPending || pagesUntilFullRefresh <= 1;
   const bool needsTextGrayscale = SETTINGS.textAntiAliasing;
   const bool needsAnyGrayscale = needsTextGrayscale || pageHasImages;
-  const bool absoluteImageGrayscale = pageHasImages && !gpio.deviceIsX3() &&
-                                      display.getController() == HalDisplay::Controller::UC8279 &&
+  // X3 was excluded here because an absolute pass on UC8279 used to run the
+  // differential base first - a full B/W frame plus an AA settle pass before the
+  // image, which looked worse than the nudge it was meant to replace. The driver
+  // now skips that base for absolute passes (Uc8279Driver::beginGrayscale), so
+  // an image page is one waveform and X3 gets the same four-grey quality the
+  // image viewer does.
+  const bool absoluteImageGrayscale = pageHasImages && display.getController() == HalDisplay::Controller::UC8279 &&
                                       renderer.grayscaleCapabilities(HalDisplay::GrayscaleMode::Absolute).supported();
   const auto grayscale = renderer.grayscaleCapabilities(absoluteImageGrayscale ? HalDisplay::GrayscaleMode::Absolute
                                                                                : HalDisplay::GrayscaleMode::Overlay);
