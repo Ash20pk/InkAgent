@@ -274,8 +274,7 @@ InkAgentSettings::StatusBarSpec InkAgentSettings::statusBarSpec() const {
   return spec;
 }
 
-ReaderRenderSpec InkAgentSettings::readerRenderSpec(const uint16_t viewportWidth,
-                                                      const uint16_t viewportHeight) const {
+ReaderRenderSpec InkAgentSettings::readerRenderSpec(const uint16_t viewportWidth, const uint16_t viewportHeight) const {
   ReaderRenderSpec spec;
   spec.fontId = getReaderFontId();
   spec.lineCompression = getReaderLineCompression();
@@ -291,14 +290,18 @@ ReaderRenderSpec InkAgentSettings::readerRenderSpec(const uint16_t viewportWidth
 }
 
 float InkAgentSettings::getReaderLineCompression() const {
+  // These multiply the font's advanceY, which already includes a line gap on top
+  // of ascender + descender. Tight now actually closes that gap rather than
+  // trimming 5% off it; getLineHeight() floors the result at the ink extent, so
+  // no value here can make lines collide.
   // SD card fonts use same compression as Bookerly (the most neutral values)
   if (sdFontFamilyName[0] != '\0') {
     switch (lineSpacing) {
       case TIGHT:
-        return 0.95f;
+        return 0.82f;
       case NORMAL:
       default:
-        return 1.0f;
+        return 0.95f;
       case WIDE:
         return 1.1f;
       case EXTRA_WIDE:
@@ -311,10 +314,10 @@ float InkAgentSettings::getReaderLineCompression() const {
     default:
       switch (lineSpacing) {
         case TIGHT:
-          return 0.95f;
+          return 0.82f;
         case NORMAL:
         default:
-          return 1.0f;
+          return 0.95f;
         case WIDE:
           return 1.1f;
         case EXTRA_WIDE:
@@ -323,14 +326,14 @@ float InkAgentSettings::getReaderLineCompression() const {
     case NOTOSANS:
       switch (lineSpacing) {
         case TIGHT:
-          return 0.90f;
+          return 0.80f;
         case NORMAL:
         default:
-          return 0.95f;
+          return 0.92f;
         case WIDE:
           return 1.0f;
         case EXTRA_WIDE:
-          return 1.05f;
+          return 1.1f;
       }
   }
 }
