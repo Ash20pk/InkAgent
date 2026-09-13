@@ -58,12 +58,18 @@ class ReadingStatsStore : public PersistableStore<ReadingStatsStore> {
     }
   }
 
-  // Folds a finished session in and persists. `readingMs` is dwell on pages
-  // read, which the reader already caps per page, so an open book left on a
-  // table does not become an evening of reading. A session with no forward
-  // turns is not a session and is dropped.
+  // Folds reading in and persists. `readingMs` is dwell on pages read, which
+  // the reader already caps per page, so an open book left on a table does not
+  // become an evening of reading.
+  //
+  // A sitting is written in pieces as it happens rather than once when the book
+  // is closed, because the close is the least reliable moment there is: a flat
+  // battery, a crash or a firmware flash all end a session without one, and
+  // everything measured up to that point was lost with it. `newSitting` is true
+  // for the first piece only; the rest are the same sitting continuing and must
+  // not each count as another.
   void recordSession(const std::string& path, const std::string& title, const std::string& author, uint32_t readingMs,
-                     uint32_t forwardTurns, uint32_t regressions, int32_t day);
+                     uint32_t forwardTurns, uint32_t regressions, int32_t day, bool newSitting = true);
 
   const std::vector<BookStats>& getBooks() const { return books; }
   const readstats::DayLog& days() const { return dayLog; }

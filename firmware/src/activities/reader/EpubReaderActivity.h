@@ -133,8 +133,17 @@ class EpubReaderActivity final : public ReaderActivity {
   // Pace on this stretch as a percentage of the reader's own running average,
   // or -1 before there is enough of a baseline to divide by.
   uint32_t sessionMeanPageMs() const;
-  // Folds the session's totals into ReadingStatsStore on the way out.
-  void recordSessionStats();
+  // Writes whatever this sitting has measured but not yet stored into
+  // ReadingStatsStore. Called every kStatsFlushTurns pages and again on the way
+  // out, so what is on the card is never more than a few pages behind what has
+  // been read — a flat battery, a crash or a reflash used to take the whole
+  // sitting with it, because the only write was the one on exit.
+  void flushSessionStats();
+  static constexpr uint32_t kStatsFlushTurns = 8;
+  uint32_t storedForwardTurns = 0;
+  uint32_t storedDwellMs = 0;
+  uint32_t storedRegressions = 0;
+  bool sittingCounted = false;
   int sessionSpeedPct() const;
   void foldSessionIntoBaseline();
   void queueBackgroundRecall();

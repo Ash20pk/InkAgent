@@ -64,7 +64,8 @@ bool ReadingStatsStore::fromJson(JsonVariantConst doc) {
 
 void ReadingStatsStore::recordSession(const std::string& path, const std::string& title, const std::string& author,
                                       const uint32_t readingMs, const uint32_t forwardTurns, const uint32_t regressions,
-                                      const int32_t day) {
+                                      const int32_t day,
+                                      const bool newSitting) {
   ensureLoaded();
   if (path.empty() || forwardTurns == 0 || readingMs == 0) return;
   // A session longer than the cap is the clock having moved, not an afternoon
@@ -95,13 +96,13 @@ void ReadingStatsStore::recordSession(const std::string& path, const std::string
   it->readingMs += ms;
   it->pages += forwardTurns;
   it->regressions += regressions;
-  if (it->sessions < UINT16_MAX) it->sessions++;
+  if (newSitting && it->sessions < UINT16_MAX) it->sessions++;
   if (it->firstDay < 0) it->firstDay = day;
   if (day >= 0) it->lastDay = day;
 
   lifetimeMs += ms;
   lifetimePages += forwardTurns;
-  lifetimeSessions++;
+  if (newSitting) lifetimeSessions++;
   // Rounded, but never down to nothing: a ten-minute sitting that landed as
   // zero minutes would silently break a streak the reader did keep.
   if (ms > 0) {
@@ -109,7 +110,12 @@ void ReadingStatsStore::recordSession(const std::string& path, const std::string
     dayLog.add(day, mins > 0 ? mins : 1);
   }
 
-  if (!saveToFile()) LOG_ERR("ReadingStats", "could not save");
+  if (!saveToFile()) {
+    LOG_ERR("ReadingStats", "could not save");
+    return;
+  }
+  LOG_INF("ReadingStats", "+%u pages %u ms (%s) -> %u pages, %u ms, %u sittings", (unsigned)forwardTurns, (unsigned)ms,
+          newSitting ? "new" : "cont", (unsigned)lifetimePages, (unsigned)lifetimeMs, (unsigned)lifetimeSessions);
 }
 
 const BookStats* ReadingStatsStore::forPath(const std::string& path) const {

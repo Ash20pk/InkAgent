@@ -1126,6 +1126,9 @@ bool EpubReaderActivity::pageTurn(bool isForwardTurn) {
     if (dwell > 0 && dwell < 300000) {
       sessionDwellTotalMs += dwell;
       sessionForwardTurns++;
+      // Every few pages rather than every page: this writes the SD card, and
+      // the point is only that a sitting cannot be lost wholesale.
+      if (sessionForwardTurns - storedForwardTurns >= kStatsFlushTurns) flushSessionStats();
     }
     if (section->currentPage < section->pageCount - 1 || section->isBuilding()) {
       section->currentPage++;
@@ -1586,18 +1589,30 @@ void EpubReaderActivity::onExit() {
   // After the question is queued, never before: a session must be compared with
   // the baseline as it stood, not with one it has already moved.
   foldSessionIntoBaseline();
-  recordSessionStats();
+  flushSessionStats();
   ReaderActivity::onExit();
 }
 
 // Keeps what the session measured. The reader has been timing pages all along
 // to work out whether this stretch is slower than usual; until now the totals
 // were used once and dropped. Same measurement, written down.
-void EpubReaderActivity::recordSessionStats() {
-  if (!epub || sessionForwardTurns == 0) return;
-  READING_STATS.recordSession(epub->getPath(), epub->getTitle(), epub->getAuthor(), sessionDwellTotalMs,
-                              sessionForwardTurns, sessionRegressions,
-                              halClock.dayNumber(SETTINGS.statusBarSpec().clockUtcOffsetQ));
+//
+// Only the part not already written goes out, so calling this repeatedly
+// through a sitting accumulates rather than double-counts, and only the first
+// call of a sitting counts as one.
+void EpubReaderActivity::flushSessionStats() {
+  if (!epub) return;
+  const uint32_t turns = sessionForwardTurns - storedForwardTurns;
+  if (turns == 0) return;
+  const uint32_t ms = sessionDwellTotalMs - storedDwellMs;
+  const uint32_t regressions = sessionRegressions - storedRegressions;
+
+  READING_STATS.recordSession(epub->getPath(), epub->getTitle(), epub->getAuthor(), ms, turns, regressions,
+                              halClock.dayNumber(SETTINGS.statusBarSpec().clockUtcOffsetQ), !sittingCounted);
+  sittingCounted = true;
+  storedForwardTurns = sessionForwardTurns;
+  storedDwellMs = sessionDwellTotalMs;
+  storedRegressions = sessionRegressions;
 }
 
 // Hands the passage the reader just left to the background task, if the reader
