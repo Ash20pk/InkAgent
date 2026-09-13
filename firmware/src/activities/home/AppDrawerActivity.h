@@ -27,6 +27,8 @@ class AppDrawerActivity : public Activity {
     OPDS_BROWSER,
     WORD_LIST,
     HIGHLIGHTS,
+    // Not READING_STATS: that is the ReadingStatsStore accessor macro.
+    BOOK_STATS,
     READ_LATER,
     FILE_BROWSER,
     FILE_TRANSFER,

@@ -133,6 +133,8 @@ class EpubReaderActivity final : public ReaderActivity {
   // Pace on this stretch as a percentage of the reader's own running average,
   // or -1 before there is enough of a baseline to divide by.
   uint32_t sessionMeanPageMs() const;
+  // Folds the session's totals into ReadingStatsStore on the way out.
+  void recordSessionStats();
   int sessionSpeedPct() const;
   void foldSessionIntoBaseline();
   void queueBackgroundRecall();

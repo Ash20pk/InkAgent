@@ -6,6 +6,7 @@
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
 #include <HalDisplay.h>
+#include <HalClock.h>
 #include <HalFrontlight.h>
 #include <HalGPIO.h>
 #include <HalStorage.h>
@@ -40,6 +41,8 @@
 #include "ReaderToolbarUi.h"
 #include "ReaderUtils.h"
 #include "ReadingPace.h"
+#include "ReadingStatsStore.h"
+#include "activities/stats/ReadingStatsActivity.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "activities/agent/AskBookActivity.h"
@@ -869,6 +872,16 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       if (!launchAskBook()) requestUpdate();
       break;
     }
+    case EpubReaderMenuActivity::MenuAction::BOOK_STATS: {
+      // This session is still running and has not been folded in yet, so what
+      // this shows is every sitting up to the one in progress. Returns to the
+      // menu, not the page, so it reads as somewhere you looked rather than
+      // somewhere you were sent.
+      startActivityForResult(std::make_unique<ReadingStatsActivity>(renderer, mappedInput, epub->getPath(),
+                                                                    epub->getTitle()),
+                             [this](const ActivityResult&) { openReaderMenu(); });
+      break;
+    }
     case EpubReaderMenuActivity::MenuAction::DISPLAY_QR: {
       if (section && section->currentPage >= 0 && section->currentPage < section->pageCount) {
         std::string fullText = section->getTextFromSectionFile();
@@ -1569,7 +1582,18 @@ void EpubReaderActivity::onExit() {
   // After the question is queued, never before: a session must be compared with
   // the baseline as it stood, not with one it has already moved.
   foldSessionIntoBaseline();
+  recordSessionStats();
   ReaderActivity::onExit();
+}
+
+// Keeps what the session measured. The reader has been timing pages all along
+// to work out whether this stretch is slower than usual; until now the totals
+// were used once and dropped. Same measurement, written down.
+void EpubReaderActivity::recordSessionStats() {
+  if (!epub || sessionForwardTurns == 0) return;
+  READING_STATS.recordSession(epub->getPath(), epub->getTitle(), epub->getAuthor(), sessionDwellTotalMs,
+                              sessionForwardTurns, sessionRegressions,
+                              halClock.dayNumber(SETTINGS.statusBarSpec().clockUtcOffsetQ));
 }
 
 // Hands the passage the reader just left to the background task, if the reader

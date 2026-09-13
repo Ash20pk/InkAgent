@@ -9,6 +9,7 @@
 #include "OpdsServerStore.h"
 #include "activities/browser/OpdsBookBrowserActivity.h"
 #include "activities/highlights/HighlightsActivity.h"
+#include "activities/stats/ReadingStatsActivity.h"
 #include "activities/home/FileBrowserActivity.h"
 #include "activities/home/RecentBooksActivity.h"
 #include "activities/network/InkAgentWebServerActivity.h"
@@ -18,6 +19,7 @@
 #include "activities/words/WordListActivity.h"
 #include "components/UITheme.h"
 #include "components/icons/drawerIcons.h"
+#include "components/icons/customListIcons.h"
 #include "components/icons/listIcons.h"
 #include "engage/ManifestActivity.h"
 #include "fontIds.h"
@@ -56,6 +58,7 @@ const freeink::Icon& iconByName(const char* name) {
   if (strcmp(name, "bookmark") == 0) return icon_bookmark_32;
   if (strcmp(name, "inbox") == 0) return icon_inbox_32;
   if (strcmp(name, "words") == 0) return icon_words_32;
+  if (strcmp(name, "chart") == 0) return icon_chart_32;
   if (strcmp(name, "settings") == 0) return icon_settings_32;
   if (strcmp(name, "info") == 0) return icon_info_32;
   if (strcmp(name, "clock") == 0 || strcmp(name, "sun") == 0) return icon_sun_32;
@@ -76,6 +79,8 @@ const freeink::Icon& iconFor(const int index, const StrId label) {
       return icon_words_32;
     case StrId::STR_HIGHLIGHTS:
       return icon_bookmark_32;
+    case StrId::STR_READING_STATS:
+      return icon_chart_32;
     case StrId::STR_READ_LATER:
       return icon_inbox_32;
     case StrId::STR_BROWSE_FILES:
@@ -100,6 +105,7 @@ void AppDrawerActivity::onEnter() {
       {Target::RECENTS, StrId::STR_MENU_RECENT_BOOKS},
       {Target::WORD_LIST, StrId::STR_WORD_LIST},
       {Target::HIGHLIGHTS, StrId::STR_HIGHLIGHTS},
+      {Target::BOOK_STATS, StrId::STR_READING_STATS},
       {Target::READ_LATER, StrId::STR_READ_LATER},
       {Target::FILE_BROWSER, StrId::STR_BROWSE_FILES},
       // Not a reading screen, but it is how the reading screens get fed: the
@@ -280,6 +286,9 @@ void AppDrawerActivity::activate(const Target target) {
       break;
     case Target::HIGHLIGHTS:
       push(makeUniqueNoThrow<HighlightsActivity>(renderer, mappedInput), "Highlights");
+      break;
+    case Target::BOOK_STATS:
+      push(makeUniqueNoThrow<ReadingStatsActivity>(renderer, mappedInput), "Reading Stats");
       break;
     case Target::READ_LATER:
       push(makeUniqueNoThrow<ReadLaterActivity>(renderer, mappedInput), "Read Later");

@@ -58,6 +58,7 @@ void EpubReaderMenuActivity::buildMenuItems(std::vector<MenuItem>& items, bool h
   }
   items.push_back({MenuAction::DICTIONARY, StrId::STR_LOOKUP});
   items.push_back({MenuAction::ASK_BOOK, StrId::STR_ASK_BOOK});
+  items.push_back({MenuAction::BOOK_STATS, StrId::STR_STATS_BOOK});
   items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
   items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
   items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
