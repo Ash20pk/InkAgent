@@ -731,13 +731,18 @@ Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message) cons
   const int marginY = metrics.popupMarginY;
   const int frameThickness = metrics.popupFrameThickness;
   const EpdFontFamily::Style popupFontFamily = metrics.popupTextBold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
-  // Scale y position proportionally to screen height
-  const int y = static_cast<int>(renderer.getScreenHeight() * metrics.popupTopOffsetRatio);
   const int textWidth = renderer.getTextWidth(UI_12_FONT_ID, message, popupFontFamily);
   const int textHeight = renderer.getLineHeight(UI_12_FONT_ID);
   const int w = textWidth + marginX * 2;
   const int h = textHeight + marginY * 2;
   const int x = (renderer.getScreenWidth() - w) / 2;
+  // A ratio places the plate's top edge proportionally down the screen; zero
+  // centres it instead. Centred is where a reader looks when the device has
+  // stopped responding to them — a plate a seventh of the way down reads as a
+  // banner announcing something, not as the device saying wait.
+  const int y = metrics.popupTopOffsetRatio > 0.0f
+                    ? static_cast<int>(renderer.getScreenHeight() * metrics.popupTopOffsetRatio)
+                    : (renderer.getScreenHeight() - h) / 2;
 
   const bool useRoundedPopup = metrics.popupCornerRadius > 0;
   if (useRoundedPopup) {

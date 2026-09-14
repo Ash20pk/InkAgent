@@ -82,19 +82,27 @@ constexpr ThemeMetrics values = {// Matched to the header's clock: a digit in ub
                                  .keyboardVerticalOffset = 0,
                                  .keyboardTextFieldWidthPercent = 88,
                                  .keyboardWidthPercent = 96,
-                                 .popupTopOffsetRatio = 0.14f,
+                                 // 0 centres the plate; see BaseTheme::drawPopup.
+                                 .popupTopOffsetRatio = 0.0f,
                                  .popupMarginX = 18,
                                  .popupMarginY = 12,
                                  .popupFrameThickness = 1,
                                  .popupCornerRadius = 0,
                                  .popupTextBold = false,
-                                 .popupTextInverted = false,
+                                 // The plate is filled white (popupCornerRadius 0 takes the
+                                 // squared-off path), so the text has to be black. False here
+                                 // painted white on white: the popup looked empty because the
+                                 // word was there and invisible.
+                                 .popupTextInverted = true,
                                  .popupTextBaselineOffsetY = -2,
                                  .popupProgressBarHeight = 4,
                                  .popupProgressDrawOutline = true,
                                  .popupProgressClampPercent = true,
-                                 .popupProgressFillInverted = false,
-                                 .popupProgressOutlineInverted = false,
+                                 // Black on the white plate, for the same reason the text is:
+                                 // these read as "inverted" because they were set for a plate
+                                 // filled black, and on a white one they drew white on white.
+                                 .popupProgressFillInverted = true,
+                                 .popupProgressOutlineInverted = true,
                                  .optionPopupItemSpacing = 4,
                                  .optionPopupInnerPadding = 20,
                                  .optionPopupSelectionVPadding = 8,
