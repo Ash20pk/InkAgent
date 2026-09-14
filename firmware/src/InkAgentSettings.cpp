@@ -235,19 +235,29 @@ bool InkAgentSettings::fromJson(JsonVariantConst doc) {
   }
 
   // One-time migration: apply new shipped defaults over an older saved file so
-  // features like the Home power button and the lock screen turn on without the
-  // user re-toggling them. Runs once per rev; later user changes then persist.
+  // a new default reaches devices that already have a settings file.
+  //
+  // Each rev is gated on its own, and that is the whole point of the pattern.
+  // One `savedRev < INKAGENT_SETTINGS_REV` around every rev's defaults means
+  // bumping the rev for one new setting re-applies every earlier rev's too, and
+  // silently reverts anything the reader has changed since — a power button
+  // they remapped, a line spacing they widened. A rev must only touch files
+  // older than itself.
   const uint32_t savedRev = doc["settingsRev"] | 0u;
-  if (savedRev < INKAGENT_SETTINGS_REV) {
+  if (savedRev < 1u) {
     shortPwrBtn = GO_HOME;
     lineSpacing = TIGHT;
     extraParagraphSpacing = 0;
     sleepScreen = LOCK;
-    // rev 2. Applied to saved files too, not just fresh installs: the whole
-    // point is the page turn people are already watching.
+    needsResave = true;
+  }
+  if (savedRev < 2u) {
     textAntiAliasing = 0;
     needsResave = true;
-    LOG_INF("CPS", "Applied settings defaults migration to rev %u", (unsigned)INKAGENT_SETTINGS_REV);
+  }
+  if (savedRev < INKAGENT_SETTINGS_REV) {
+    LOG_INF("CPS", "Applied settings defaults migration, rev %u -> %u", (unsigned)savedRev,
+            (unsigned)INKAGENT_SETTINGS_REV);
   }
 
   if (needsResave) {
