@@ -409,15 +409,28 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
   // the label's line box. Below that, drawText's max(0, ...) clamp pins the text
   // to the top and the two drift apart, which is what a taller status font
   // (headerStatusUsesTitleFont) causes. Growing the rect to the line height
-  // keeps both centred; band.y is nudged up by half the growth so the pair stays
-  // on the strip rather than sliding down the band.
+  // keeps both centred.
   const int16_t labelLineH = ui.target.lineHeight(fui::GfxRendererTarget::FONT_SMALL);
   int16_t batteryH = static_cast<int16_t>(metrics.batteryBarHeight);
-  int16_t batteryY = band.y;
-  if (showBatteryPercentage && labelLineH > batteryH) {
-    batteryY = static_cast<int16_t>(band.y - (labelLineH - batteryH) / 2);
-    if (batteryY < band.y - metrics.topPadding) batteryY = static_cast<int16_t>(band.y - metrics.topPadding);
-    batteryH = labelLineH;
+  if (showBatteryPercentage && labelLineH > batteryH) batteryH = labelLineH;
+
+  int16_t batteryY;
+  if (!batteryDetached && !manualRightLabel) {
+    // One line across the header. fui::header centres the title in the band, so
+    // an indicator pinned to the top strip sits above it and the two ends of the
+    // bar read as different rows — the clock at one height, the battery at
+    // another. Centring on the same band the title is centred on puts them on a
+    // single line, with the side insets already equal at headerSidePadding.
+    batteryY = static_cast<int16_t>(band.y + (band.height - batteryH) / 2);
+  } else {
+    // A detached strip, or a right label sharing this side: both are deliberate
+    // two-row layouts, and the indicator keeps the upper row.
+    batteryY = band.y;
+    const int16_t strip = static_cast<int16_t>(metrics.batteryBarHeight);
+    if (batteryH > strip) {
+      batteryY = static_cast<int16_t>(band.y - (batteryH - strip) / 2);
+      if (batteryY < band.y - metrics.topPadding) batteryY = static_cast<int16_t>(band.y - metrics.topPadding);
+    }
   }
   fui::batteryIndicator(ui.frame, fui::Rect{batteryX, batteryY, batteryReserve, batteryH}, battery);
 
