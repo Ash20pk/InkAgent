@@ -29,13 +29,23 @@ constexpr int kHeroFont = NOTOSANS_18_FONT_ID;   // the single number the page i
 constexpr int kCardFont = NOTOSANS_14_FONT_ID;   // the rates under it
 constexpr int kValueFont = NOTOSANS_12_FONT_ID;  // a figure at the end of a row
 constexpr int kRowFont = UI_12_FONT_ID;          // a row's label
-constexpr int kLabelFont = UI_10_FONT_ID;        // captions, headings, units
+constexpr int kHeadingFont = UI_12_FONT_ID;      // what a section of the page is
+constexpr int kCaptionFont = UI_10_FONT_ID;      // the unit under a figure, the chart's range
+
+// Vertical rhythm. Two gaps, not one: things that belong together are a
+// kTight apart and separate bands are a kBand apart. Spacing everything by the
+// theme's single 8px step is what made the page read as one block — a figure,
+// its unit, a chart and a heading all equally far from each other is the same
+// as none of them being grouped at all.
+constexpr int kTight = 8;
+constexpr int kBand = 24;
 
 // Bars any narrower than this stop reading as a chart and start reading as
 // noise, so a narrow panel shows fewer days rather than thinner days.
 constexpr int kMinBarWidth = 3;
 constexpr int kBarGap = 2;
-constexpr int kChartHeight = 40;
+constexpr int kChartHeight = 56;
+constexpr int kProgressHeight = 10;
 
 std::string duration(const uint32_t ms) {
   char buf[16];
@@ -189,22 +199,25 @@ void ReadingStatsActivity::buildForBook(const BookStats& stats) {
 
 // --- geometry ----------------------------------------------------------------
 
+// Kept in step with the draw functions by using the same constants they do; if
+// the two ever disagree the row region starts in the wrong place.
 int ReadingStatsActivity::dashboardHeight() const {
-  const auto& metrics = UITheme::getInstance().getMetrics();
   if (heroValue.empty()) return 0;
 
-  int height = renderer.getLineHeight(kLabelFont) + renderer.getLineHeight(kHeroFont) + metrics.verticalSpacing;
-  if (!chart.empty()) height += kChartHeight + renderer.getLineHeight(kLabelFont) + metrics.verticalSpacing;
-  if (progressPct >= 0) height += 8 + metrics.verticalSpacing;
+  int height = renderer.getLineHeight(kCaptionFont) + renderer.getLineHeight(kHeroFont) + kBand;
+  if (!chart.empty()) height += kChartHeight + kTight + renderer.getLineHeight(kCaptionFont) + kBand;
+  if (progressPct >= 0) height += kProgressHeight + kBand;
   if (!cards.empty()) {
-    height += renderer.getLineHeight(kCardFont) + renderer.getLineHeight(kLabelFont) + metrics.verticalSpacing * 2;
+    height += 1 + kTight + renderer.getLineHeight(kCardFont) + renderer.getLineHeight(kCaptionFont) + kBand;
   }
   return height;
 }
 
 int ReadingStatsActivity::listTop() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  return metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing + dashboardHeight();
+  // Must match where render() starts the dashboard, or the rows are measured
+  // against a different origin than they are drawn at.
+  return metrics.topPadding + metrics.headerHeight + kBand + dashboardHeight();
 }
 
 // A row you can press is a touch target and takes the theme's list height. A
@@ -214,12 +227,12 @@ int ReadingStatsActivity::listTop() const {
 int ReadingStatsActivity::rowHeight() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   if (selected >= 0) return std::max(1, metrics.listRowHeight);
-  return std::max(1, renderer.getLineHeight(kRowFont) + metrics.verticalSpacing);
+  return std::max(1, renderer.getLineHeight(kRowFont) + kTight + 4);
 }
 
 int ReadingStatsActivity::visibleRows() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const int heading = rowsHeading.empty() ? 0 : renderer.getLineHeight(kLabelFont) + metrics.verticalSpacing;
+  const int heading = rowsHeading.empty() ? 0 : renderer.getLineHeight(kHeadingFont) + kTight;
   const int space = renderer.getScreenHeight() - listTop() - heading - metrics.buttonHintsHeight;
   return std::max(1, space / rowHeight());
 }
@@ -277,19 +290,21 @@ int ReadingStatsActivity::drawHero(int y) const {
   const int pad = metrics.contentSidePadding;
   const int right = renderer.getScreenWidth() - pad;
 
-  renderer.drawText(kLabelFont, pad, y, heroLabel.c_str());
+  // The caption sits directly on the figure it names, with the band's air
+  // below the pair rather than between them.
+  renderer.drawText(kCaptionFont, pad, y, heroLabel.c_str());
   if (!asideLabel.empty()) {
-    const int width = renderer.getTextWidth(kLabelFont, asideLabel.c_str());
-    renderer.drawText(kLabelFont, right - width, y, asideLabel.c_str());
+    const int width = renderer.getTextWidth(kCaptionFont, asideLabel.c_str());
+    renderer.drawText(kCaptionFont, right - width, y, asideLabel.c_str());
   }
-  y += renderer.getLineHeight(kLabelFont);
+  y += renderer.getLineHeight(kCaptionFont);
 
   renderer.drawText(kHeroFont, pad, y, heroValue.c_str());
   if (!asideValue.empty()) {
     const int width = renderer.getTextWidth(kHeroFont, asideValue.c_str());
     renderer.drawText(kHeroFont, right - width, y, asideValue.c_str());
   }
-  return y + renderer.getLineHeight(kHeroFont) + metrics.verticalSpacing;
+  return y + renderer.getLineHeight(kHeroFont) + kBand;
 }
 
 int ReadingStatsActivity::drawChart(int y) const {
@@ -321,13 +336,13 @@ int ReadingStatsActivity::drawChart(int y) const {
     renderer.fillRect(x, baseline - height, barWidth, height);
   }
 
-  y = baseline + 2;
-  renderer.drawText(kLabelFont, pad, y, chartCaption.c_str());
+  y = baseline + kTight;
+  renderer.drawText(kCaptionFont, pad, y, chartCaption.c_str());
   if (!chartAside.empty()) {
-    const int aside = renderer.getTextWidth(kLabelFont, chartAside.c_str());
-    renderer.drawText(kLabelFont, renderer.getScreenWidth() - pad - aside, y, chartAside.c_str());
+    const int aside = renderer.getTextWidth(kCaptionFont, chartAside.c_str());
+    renderer.drawText(kCaptionFont, renderer.getScreenWidth() - pad - aside, y, chartAside.c_str());
   }
-  return y + renderer.getLineHeight(kLabelFont) + metrics.verticalSpacing;
+  return y + renderer.getLineHeight(kCaptionFont) + kBand;
 }
 
 int ReadingStatsActivity::drawProgress(int y) const {
@@ -335,10 +350,10 @@ int ReadingStatsActivity::drawProgress(int y) const {
   const int pad = metrics.contentSidePadding;
   const int width = renderer.getScreenWidth() - pad * 2;
 
-  renderer.drawRect(pad, y, width, 8);
+  renderer.drawRect(pad, y, width, kProgressHeight);
   const int filled = (width - 2) * progressPct / 100;
-  if (filled > 0) renderer.fillRect(pad + 1, y + 1, filled, 6);
-  return y + 8 + metrics.verticalSpacing;
+  if (filled > 0) renderer.fillRect(pad + 1, y + 1, filled, kProgressHeight - 2);
+  return y + kProgressHeight + kBand;
 }
 
 int ReadingStatsActivity::drawCards(int y) const {
@@ -351,22 +366,20 @@ int ReadingStatsActivity::drawCards(int y) const {
   // A rule above the row rather than a box around each figure: a box per card
   // is three times the ink for the same grouping, and ink is what e-ink costs.
   renderer.fillRect(pad, y, width, 1);
-  y += metrics.verticalSpacing;
+  y += kTight;
 
+  const int valueH = renderer.getLineHeight(kCardFont);
   for (int i = 0; i < count; i++) {
     const int centre = pad + column * i + column / 2;
     const int valueWidth = renderer.getTextWidth(kCardFont, cards[i].value.c_str());
     renderer.drawText(kCardFont, centre - valueWidth / 2, y, cards[i].value.c_str());
-    const int labelWidth = renderer.getTextWidth(kLabelFont, cards[i].label.c_str());
-    renderer.drawText(kLabelFont, centre - labelWidth / 2, y + renderer.getLineHeight(kCardFont),
-                      cards[i].label.c_str());
-    // Hairlines between the columns, drawn short so they separate the figures
-    // without boxing them in.
-    if (i > 0) {
-      renderer.fillRect(pad + column * i, y, 1, renderer.getLineHeight(kCardFont));
-    }
+    const int labelWidth = renderer.getTextWidth(kCaptionFont, cards[i].label.c_str());
+    renderer.drawText(kCaptionFont, centre - labelWidth / 2, y + valueH, cards[i].label.c_str());
+    // Hairlines between the columns, inset from the figures so they separate
+    // without boxing anything in.
+    if (i > 0) renderer.fillRect(pad + column * i, y, 1, valueH);
   }
-  return y + renderer.getLineHeight(kCardFont) + renderer.getLineHeight(kLabelFont) + metrics.verticalSpacing;
+  return y + valueH + renderer.getLineHeight(kCaptionFont) + kBand;
 }
 
 // --- render ------------------------------------------------------------------
@@ -388,15 +401,18 @@ void ReadingStatsActivity::render(RenderLock&&) {
                                      Rect{pad, y, pageWidth - pad * 2, renderer.getLineHeight(UI_12_FONT_ID) * 3},
                                      UI_12_FONT_ID, tr(STR_STATS_EMPTY), 3);
   } else {
-    int y = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
+    int y = metrics.topPadding + metrics.headerHeight + kBand;
     y = drawHero(y);
     if (!chart.empty()) y = drawChart(y);
     if (progressPct >= 0) y = drawProgress(y);
     if (!cards.empty()) y = drawCards(y);
 
     if (!rowsHeading.empty()) {
-      renderer.drawText(kLabelFont, pad, y, rowsHeading.c_str());
-      y += renderer.getLineHeight(kLabelFont) + metrics.verticalSpacing;
+      // Set at the row's own size, not the caption's. A heading smaller than
+      // the rows it introduces reads as a footnote to the band above rather
+      // than as the name of what follows.
+      renderer.drawText(kHeadingFont, pad, y, rowsHeading.c_str());
+      y += renderer.getLineHeight(kHeadingFont) + kTight;
     }
 
     const int pitch = rowHeight();

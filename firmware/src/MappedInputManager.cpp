@@ -4,6 +4,7 @@
 #include <FreeInkUICore.h>
 #include <GfxRenderer.h>
 #include <HalFrontlight.h>
+#include <Logging.h>
 
 #include <algorithm>
 #include <cstdlib>
@@ -18,6 +19,26 @@ void MappedInputManager::update() const {
   for (uint8_t value = 0; value <= static_cast<uint8_t>(Button::ScreenDown); ++value) {
     if (!isPressed(static_cast<Button>(value))) longPressFiredButtons &= ~(1u << value);
   }
+
+#if LOG_LEVEL >= 2
+  // Serial is the only window into a device with no debugger, and nothing else
+  // reports input. Without this, a screen that ignores a press and a button
+  // that never reached the firmware look identical from the outside: silence.
+  // Logged from the logical layer so the mapping is visible too — a press
+  // arriving as the wrong Button is its own class of bug.
+  // Index-matched to Button; a name per enumerator so a mismatch is a compile
+  // error rather than a mislabelled log line.
+  static const char* const kNames[] = {"Back",    "Confirm",    "Left",        "Right",       "Up",
+                                       "Down",    "Power",      "PageBack",    "PageForward", "NavNext",
+                                       "NavPrev", "ScreenLeft", "ScreenRight", "ScreenUp",    "ScreenDown"};
+  static_assert(sizeof(kNames) / sizeof(kNames[0]) == static_cast<size_t>(Button::ScreenDown) + 1,
+                "kNames must name every Button");
+  for (uint8_t value = 0; value <= static_cast<uint8_t>(Button::ScreenDown); ++value) {
+    const auto button = static_cast<Button>(value);
+    if (wasPressed(button)) LOG_DBG("BTN", "%s down", kNames[value]);
+    if (wasReleased(button)) LOG_DBG("BTN", "%s up", kNames[value]);
+  }
+#endif
 }
 
 bool MappedInputManager::isNavDirectionSwapped() const {
