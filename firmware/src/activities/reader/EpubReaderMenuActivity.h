@@ -24,7 +24,6 @@ class EpubReaderMenuActivity final : public UiListActivity {
     TOGGLE_BOOKMARK,
     SCREENSHOT,
     DISPLAY_QR,
-    GO_HOME,
     SYNC,
     DELETE_CACHE,
     DICTIONARY,
@@ -40,6 +39,17 @@ class EpubReaderMenuActivity final : public UiListActivity {
     StrId labelId;
   };
 
+  // What a row belongs to. The menu is built in this order and a heading is
+  // drawn wherever the group changes, so the ordering and the headings cannot
+  // disagree with each other.
+  enum class Group : uint8_t { GoTo, Text, Book, System };
+  static Group groupFor(MenuAction action);
+  static StrId headingFor(Group group);
+  // True when activating the row leaves this screen for another. Those rows
+  // carry a chevron in the value slot; rows that change something in place
+  // carry the value instead, and rows that just do something carry neither.
+  static bool opensScreen(MenuAction action);
+
   static void buildMenuItems(std::vector<MenuItem>& items, bool hasFootnotes, bool hasBookmarks);
 
   explicit EpubReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, const std::string& title,
@@ -54,7 +64,7 @@ class EpubReaderMenuActivity final : public UiListActivity {
   // fixed-capacity array avoids any heap allocation for the row list. Labels
   // are set once in the constructor (buildMenuRowItems()); buildScreen()
   // only refreshes rows whose values reflect live state.
-  static constexpr size_t MAX_MENU_ITEMS = 18;  // +1 for InkAgent ASK_BOOK, +1 for BOOK_STATS
+  static constexpr size_t MAX_MENU_ITEMS = 17;  // +1 for InkAgent ASK_BOOK, +1 for BOOK_STATS
   freeink::ui::ListItem menuRowItems[MAX_MENU_ITEMS]{};
   void buildMenuRowItems();
 

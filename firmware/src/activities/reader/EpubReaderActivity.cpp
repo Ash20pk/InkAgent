@@ -5,8 +5,8 @@
 #include <FontCacheManager.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
-#include <HalDisplay.h>
 #include <HalClock.h>
+#include <HalDisplay.h>
 #include <HalFrontlight.h>
 #include <HalGPIO.h>
 #include <HalStorage.h>
@@ -42,11 +42,11 @@
 #include "ReaderUtils.h"
 #include "ReadingPace.h"
 #include "ReadingStatsStore.h"
-#include "activities/stats/ReadingStatsActivity.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"
 #include "activities/agent/AskBookActivity.h"
 #include "activities/settings/TextSettingsActivity.h"
+#include "activities/stats/ReadingStatsActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/RelayTask.h"
@@ -877,9 +877,9 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       // this shows is every sitting up to the one in progress. Returns to the
       // menu, not the page, so it reads as somewhere you looked rather than
       // somewhere you were sent.
-      startActivityForResult(std::make_unique<ReadingStatsActivity>(renderer, mappedInput, epub->getPath(),
-                                                                    epub->getTitle()),
-                             [this](const ActivityResult&) { openReaderMenu(); });
+      startActivityForResult(
+          std::make_unique<ReadingStatsActivity>(renderer, mappedInput, epub->getPath(), epub->getTitle()),
+          [this](const ActivityResult&) { openReaderMenu(); });
       break;
     }
     case EpubReaderMenuActivity::MenuAction::DISPLAY_QR: {
@@ -893,10 +893,6 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuActivity::MenuAction 
       }
       requestUpdate();
       break;
-    }
-    case EpubReaderMenuActivity::MenuAction::GO_HOME: {
-      onGoHome();
-      return;
     }
     case EpubReaderMenuActivity::MenuAction::DELETE_CACHE: {
       {
@@ -1242,8 +1238,8 @@ void EpubReaderActivity::renderBook() {
   // margin the reader had chosen did nothing at the foot of the page.
   if (automaticPageTurnActive &&
       (statusBarHeight == 0 || statusBarHeight == UITheme::getInstance().getProgressBarHeight())) {
-    orientedMarginBottom += statusBarHeight + UITheme::getInstance().getMetrics().statusBarVerticalMargin +
-                            SETTINGS.screenMargin;
+    orientedMarginBottom +=
+        statusBarHeight + UITheme::getInstance().getMetrics().statusBarVerticalMargin + SETTINGS.screenMargin;
   } else {
     orientedMarginBottom += statusBarHeight + SETTINGS.screenMargin;
   }
@@ -2661,7 +2657,7 @@ void EpubReaderActivity::activateMoreRow(int row) {
   onReaderMenuConfirm(action);
   // Actions that neither open a screen nor leave the reader (a sync with no
   // credentials, say) would otherwise leave the closed panel on screen.
-  if (action != MA::GO_HOME && action != MA::DELETE_CACHE) requestUpdate();
+  if (action != MA::DELETE_CACHE) requestUpdate();
 }
 
 void EpubReaderActivity::navigateToHref(const std::string& hrefStr, const bool savePosition) {

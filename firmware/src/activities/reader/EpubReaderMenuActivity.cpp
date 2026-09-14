@@ -31,11 +31,29 @@ EpubReaderMenuActivity::EpubReaderMenuActivity(GfxRenderer& renderer, MappedInpu
 // here since menuItems (and thus which rows exist) never changes after
 // construction; buildScreen() only touches the two rows with a live value.
 void EpubReaderMenuActivity::buildMenuRowItems() {
+  // A chevron rather than a word: it says the row leads somewhere without
+  // claiming any of the label's width, and it lines up down the right edge
+  // with the value rows, so every row ends in the same column.
+  static constexpr const char* kOpensScreen = "\u203A";
+
+  bool haveGroup = false;
+  Group previousGroup = Group::GoTo;
   for (size_t i = 0; i < menuItems.size() && i < MAX_MENU_ITEMS; i++) {
+    const MenuAction action = menuItems[i].action;
     fui::ListItem item;
     item.label = I18N.get(menuItems[i].labelId);
     item.actionValue = static_cast<int16_t>(i);
-    if (menuItems[i].action == MenuAction::ASK_BOOK) item.enabled = INKAGENT_STORE.isPaired();
+    if (action == MenuAction::ASK_BOOK) item.enabled = INKAGENT_STORE.isPaired();
+    if (opensScreen(action)) item.value = kOpensScreen;
+
+    // The heading belongs to the first row of each group, so a group that
+    // built no rows (no footnotes, no frontlight) leaves no heading behind.
+    const Group group = groupFor(action);
+    if (!haveGroup || group != previousGroup) {
+      item.sectionHeading = I18N.get(headingFor(group));
+      previousGroup = group;
+      haveGroup = true;
+    }
     menuRowItems[i] = item;
   }
 }
@@ -43,30 +61,86 @@ void EpubReaderMenuActivity::buildMenuRowItems() {
 void EpubReaderMenuActivity::buildMenuItems(std::vector<MenuItem>& items, bool hasFootnotes, bool hasBookmarks) {
   items.clear();
   items.reserve(MAX_MENU_ITEMS);
+
+  // Somewhere else in the book.
   items.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
-  if (hasFootnotes) {
-    items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
-  }
-  if (hasBookmarks) {
-    items.push_back({MenuAction::BOOKMARKS, StrId::STR_BOOKMARKS});
-  }
-  items.push_back({MenuAction::TOGGLE_BOOKMARK, StrId::STR_TOGGLE_BOOKMARK});
+  if (hasFootnotes) items.push_back({MenuAction::FOOTNOTES, StrId::STR_FOOTNOTES});
+  if (hasBookmarks) items.push_back({MenuAction::BOOKMARKS, StrId::STR_BOOKMARKS});
+  items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
+
+  // How the page looks.
   items.push_back({MenuAction::TEXT_SETTINGS, StrId::STR_TEXT_SETTINGS});
   items.push_back({MenuAction::NIGHT_MODE, StrId::STR_NIGHT_MODE});
-  if (Frontlight.present()) {
-    items.push_back({MenuAction::FRONTLIGHT, StrId::STR_FRONTLIGHT});
-  }
+  if (Frontlight.present()) items.push_back({MenuAction::FRONTLIGHT, StrId::STR_FRONTLIGHT});
+  items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
+  items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
+
+  // Things done to this book.
+  items.push_back({MenuAction::TOGGLE_BOOKMARK, StrId::STR_TOGGLE_BOOKMARK});
   items.push_back({MenuAction::DICTIONARY, StrId::STR_LOOKUP});
   items.push_back({MenuAction::ASK_BOOK, StrId::STR_ASK_BOOK});
   items.push_back({MenuAction::BOOK_STATS, StrId::STR_STATS_BOOK});
-  items.push_back({MenuAction::ROTATE_SCREEN, StrId::STR_ORIENTATION});
-  items.push_back({MenuAction::AUTO_PAGE_TURN, StrId::STR_AUTO_TURN_PAGES_PER_MIN});
-  items.push_back({MenuAction::GO_TO_PERCENT, StrId::STR_GO_TO_PERCENT});
+  items.push_back({MenuAction::SYNC, StrId::STR_SYNC_PROGRESS});
+
+  // The device. No Go Home: the bottom-left button already is one, and a menu
+  // row duplicating a button is a row to scroll past.
   items.push_back({MenuAction::SCREENSHOT, StrId::STR_SCREENSHOT_BUTTON});
   items.push_back({MenuAction::DISPLAY_QR, StrId::STR_DISPLAY_QR});
-  items.push_back({MenuAction::GO_HOME, StrId::STR_GO_HOME_BUTTON});
-  items.push_back({MenuAction::SYNC, StrId::STR_SYNC_PROGRESS});
   items.push_back({MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE});
+}
+
+EpubReaderMenuActivity::Group EpubReaderMenuActivity::groupFor(const MenuAction action) {
+  switch (action) {
+    case MenuAction::SELECT_CHAPTER:
+    case MenuAction::FOOTNOTES:
+    case MenuAction::BOOKMARKS:
+    case MenuAction::GO_TO_PERCENT:
+      return Group::GoTo;
+    case MenuAction::TEXT_SETTINGS:
+    case MenuAction::NIGHT_MODE:
+    case MenuAction::FRONTLIGHT:
+    case MenuAction::ROTATE_SCREEN:
+    case MenuAction::AUTO_PAGE_TURN:
+      return Group::Text;
+    case MenuAction::TOGGLE_BOOKMARK:
+    case MenuAction::DICTIONARY:
+    case MenuAction::ASK_BOOK:
+    case MenuAction::BOOK_STATS:
+    case MenuAction::SYNC:
+      return Group::Book;
+    default:
+      return Group::System;
+  }
+}
+
+StrId EpubReaderMenuActivity::headingFor(const Group group) {
+  switch (group) {
+    case Group::GoTo:
+      return StrId::STR_MENU_GROUP_GOTO;
+    case Group::Text:
+      return StrId::STR_MENU_GROUP_TEXT;
+    case Group::Book:
+      return StrId::STR_MENU_GROUP_BOOK;
+    default:
+      return StrId::STR_CAT_SYSTEM;
+  }
+}
+
+bool EpubReaderMenuActivity::opensScreen(const MenuAction action) {
+  switch (action) {
+    case MenuAction::SELECT_CHAPTER:
+    case MenuAction::FOOTNOTES:
+    case MenuAction::BOOKMARKS:
+    case MenuAction::GO_TO_PERCENT:
+    case MenuAction::TEXT_SETTINGS:
+    case MenuAction::DICTIONARY:
+    case MenuAction::ASK_BOOK:
+    case MenuAction::BOOK_STATS:
+    case MenuAction::DISPLAY_QR:
+      return true;
+    default:
+      return false;
+  }
 }
 
 void EpubReaderMenuActivity::closeCancelled() {
