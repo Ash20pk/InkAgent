@@ -39,8 +39,10 @@ struct JpegContext {
   // Fine scale in 16.16 fixed-point (ESP32-C3 has no FPU).
   // X and Y axes use separate scale factors: the aspect ratio of the output (dstWidth/dstHeight)
   // may differ from the source (srcWidth/srcHeight) due to integer rounding of displayHeight.
-  // Using a single (X-based) scale for both axes causes the wrong srcRow to be skipped
-  // during nearest-neighbor downscaling, potentially losing critical image content.
+  // Using a single (X-based) scale for both axes samples the wrong source row,
+  // losing image content. The resample itself is bilinear, on top of JPEGDEC's
+  // DCT-domain 1/2..1/8 pre-scale, so only the residual factor below 2x is
+  // interpolated here.
   int32_t fineScaleFPX{1 << 16};  // X: src -> dst column mapping
   int32_t invScaleFPX{1 << 16};   // X: dst -> src column mapping
   int32_t fineScaleFPY{1 << 16};  // Y: src -> dst row mapping
