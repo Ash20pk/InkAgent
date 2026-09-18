@@ -673,7 +673,16 @@ void SleepActivity::renderLockSleepScreen() const {
         cfgFile.close();
       }
     }
-    if (path.empty()) return false;
+    if (path.empty()) {
+      LOG_INF("SLP", "lock wallpaper: none configured (%s absent or empty)", LOCK_WALLPAPER_CONF);
+      return false;
+    }
+    // Heap at the moment of decode, because that is what separates the two ways
+    // this goes wrong: sleeping from Home leaves far more of it than sleeping
+    // from a book with a layout cache resident, and an image decode is the
+    // largest allocation the device makes.
+    LOG_INF("SLP", "lock wallpaper: %s (free heap %u, largest block %u)", path.c_str(), (unsigned)ESP.getFreeHeap(),
+            (unsigned)ESP.getMaxAllocHeap());
     std::string ext = path.substr(path.rfind('.') == std::string::npos ? path.size() : path.rfind('.'));
     for (auto& ch : ext) ch = static_cast<char>(tolower(ch));
     if (ext == ".bmp") {
@@ -684,6 +693,7 @@ void SleepActivity::renderLockSleepScreen() const {
         const bool ok = bmp.parseHeaders() == BmpReaderError::Ok &&
                         renderer.drawBitmap1Bit(bmp, place.x, place.y, pageWidth, pageHeight);
         bmpFile.close();
+        LOG_INF("SLP", "lock wallpaper bmp: %s", ok ? "drawn" : "failed");
         if (ok) return true;
       }
     } else if (ext == ".xth" || ext == ".xtg") {
@@ -697,6 +707,8 @@ void SleepActivity::renderLockSleepScreen() const {
         xthX = (pageWidth - xthWallpaper.width()) / 2;
         xthY = (pageHeight - xthWallpaper.height()) / 2;
         xthReady = true;
+        LOG_INF("SLP", "lock wallpaper xth: drawn %ux%u", (unsigned)xthWallpaper.width(),
+                (unsigned)xthWallpaper.height());
         // B/W base only. The four levels are re-dithered to ink or paper here;
         // if the grayscale passes below run, they replace this entirely.
         for (uint16_t y = 0; y < xthWallpaper.height(); y++) {
@@ -715,7 +727,9 @@ void SleepActivity::renderLockSleepScreen() const {
       cfg.maxHeight = pageHeight;
       cfg.useGrayscale = true;
       cfg.useDithering = true;
-      if (decoder->decodeToFramebuffer(path, renderer, cfg)) return true;
+      const bool ok = decoder->decodeToFramebuffer(path, renderer, cfg);
+      LOG_INF("SLP", "lock wallpaper decode: %s (free heap %u)", ok ? "ok" : "failed", (unsigned)ESP.getFreeHeap());
+      if (ok) return true;
     }
     LOG_ERR("SLP", "lock wallpaper failed: %s (free heap %u)", path.c_str(), (unsigned)ESP.getFreeHeap());
     renderer.clearScreen();  // a partial draw may have dirtied the buffer

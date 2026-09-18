@@ -40,12 +40,6 @@ class ReadingStatsActivity final : public Activity {
   void render(RenderLock&&) override;
 
  private:
-  // A figure and what it is, in the row under the chart.
-  struct Card {
-    std::string value;
-    std::string label;
-  };
-
   // A line in the region below the dashboard: a book, which leads to its own
   // page, or a plain figure that cannot be selected.
   struct Row {
@@ -63,14 +57,27 @@ class ReadingStatsActivity final : public Activity {
   std::string heroLabel;   // what it is, small, above it
   std::string asideValue;  // streak, or how far through the book
   std::string asideLabel;
-  std::vector<Card> cards;
-  // Daily minutes, oldest first, for the library view's chart. Empty in the
-  // book view, which shows progress instead — daily totals are kept for the
-  // device, not per book.
+  // The rates, on the library page, where they sit under the chart rather than
+  // in the list: the list there is books, and a figure is not a book.
+  std::vector<Row> detail;
+  std::string detailHeading;
+  // Daily minutes, oldest first, for the library view's chart. A week, not the
+  // whole 28-day log: seven bars can each carry their own label on the x axis,
+  // where twenty-eight can only be labelled at the ends and left to be guessed
+  // at in between. Empty in the book view, which shows progress instead —
+  // daily totals are kept for the device, not per book.
   std::vector<uint16_t> chart;
-  uint16_t chartPeak = 0;
-  std::string chartCaption;
-  std::string chartAside;
+  // A marked value on the y axis.
+  struct Tick {
+    uint16_t minutes;
+    std::string label;
+  };
+  // Top of the y scale: the week's peak rounded up to a figure worth printing,
+  // so the ticks land on round numbers instead of on whatever was read.
+  uint16_t chartMax = 0;
+  std::vector<Tick> chartTicks;
+  // One label per bar, under the day it belongs to.
+  std::vector<std::string> chartDays;
   // 0-100, or -1 when this book has no known position. Book view only.
   int progressPct = -1;
 
@@ -85,8 +92,10 @@ class ReadingStatsActivity final : public Activity {
   void buildForBook(const struct BookStats& stats);
   void buildForLibrary();
   // Pages and the two rates, identical on both pages.
-  static std::vector<Card> rateCards(uint32_t pages, uint32_t ms);
+  static std::vector<Row> rateRows(uint32_t pages, uint32_t ms);
 
+  // Chart height for this panel; the draw and the measurement must agree.
+  int chartHeight() const;
   // Height of the dashboard above the scrolling region, so both the renderer
   // and the row arithmetic agree on where the list starts.
   int dashboardHeight() const;
@@ -96,11 +105,21 @@ class ReadingStatsActivity final : public Activity {
   void moveSelection(int delta);
   void activateSelected();
   std::string describeDay(int32_t day, int32_t today) const;
+  // Short name of the weekday `day` falls on; day 0 is 2000-01-01, a Saturday.
+  static std::string weekdayName(int32_t day);
+  // Top of the scale, and the values marked on it, for a week peaking at
+  // `peakMinutes`.
+  void buildScale(uint16_t peakMinutes);
 
   // Each returns the y it finished at, so the bands stack without any of them
   // knowing what came before.
   int drawHero(int y) const;
   int drawChart(int y) const;
   int drawProgress(int y) const;
-  int drawCards(int y) const;
+  int drawDetail(int y) const;
+  // Every label/figure pair on the page goes through here, so a row in the
+  // fixed band and a row in the list cannot be set differently.
+  void drawRow(int y, const Row& row, bool isSelected) const;
+  // A section name, in the one style the page uses for them.
+  int drawHeading(int y, const std::string& text) const;
 };

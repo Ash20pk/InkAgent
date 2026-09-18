@@ -4,6 +4,7 @@
 #include <common/FsApiConstants.h>  // for oflag_t
 #include <freertos/semphr.h>
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -35,6 +36,11 @@ class HalStorage {
   bool disconnectUsbDriveHost();
   void endUsbDrive();
   UsbDriveState usbDriveState() const;
+  // Total card capacity in bytes; 0 if not mounted.
+  uint64_t sdTotalBytes() const;
+  // Used space in bytes; 0 if not mounted. Not const: the underlying value is
+  // cached with a TTL because computing it scans the FAT.
+  uint64_t sdUsedBytes();
   std::vector<String> listFiles(const char* path = "/", int maxFiles = 200);
   // Read the entire file at `path` into a String. Returns empty string on failure.
   String readFile(const char* path);
