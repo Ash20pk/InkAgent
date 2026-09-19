@@ -68,11 +68,10 @@ void HighlightsActivity::render(RenderLock&&) {
 
   if (highlights.empty()) {
     const int y = renderer.getScreenHeight() / 2 - 20;
-    UITheme::drawCenteredWrappedText(
-        renderer,
-        Rect{metrics.contentSidePadding, y, pageWidth - metrics.contentSidePadding * 2,
-             renderer.getLineHeight(UI_12_FONT_ID) * 3},
-        UI_12_FONT_ID, tr(STR_HIGHLIGHTS_EMPTY), 3);
+    UITheme::drawCenteredWrappedText(renderer,
+                                     Rect{metrics.contentSidePadding, y, pageWidth - metrics.contentSidePadding * 2,
+                                          renderer.getLineHeight(UI_12_FONT_ID) * 3},
+                                     UI_12_FONT_ID, tr(STR_HIGHLIGHTS_EMPTY), 3);
   } else {
     const int rowHeight = std::max(1, metrics.listWithSubtitleRowHeight);
     const int startY = metrics.topPadding + metrics.headerHeight + metrics.verticalSpacing;
@@ -84,8 +83,8 @@ void HighlightsActivity::render(RenderLock&&) {
 
       // The passage first, its book underneath: you recognise what you marked,
       // not which file it lives in.
-      const auto lines = renderer.wrappedText(UI_12_FONT_ID, h.summary.c_str(),
-                                              pageWidth - metrics.contentSidePadding * 2, 1);
+      const auto lines =
+          renderer.wrappedText(UI_12_FONT_ID, h.summary.c_str(), pageWidth - metrics.contentSidePadding * 2, 1);
       if (!lines.empty()) {
         renderer.drawText(UI_12_FONT_ID, metrics.contentSidePadding, rowY, lines.front().c_str());
       }
@@ -94,8 +93,8 @@ void HighlightsActivity::render(RenderLock&&) {
       renderer.drawText(UI_10_FONT_ID, metrics.contentSidePadding, rowY + renderer.getLineHeight(UI_12_FONT_ID), sub);
 
       if (top + i == selected) {
-        renderer.fillRect(metrics.contentSidePadding, rowY + rowHeight - 8,
-                          pageWidth - metrics.contentSidePadding * 2, 3);
+        renderer.fillRect(metrics.contentSidePadding, rowY + rowHeight - 8, pageWidth - metrics.contentSidePadding * 2,
+                          3);
       }
     }
   }

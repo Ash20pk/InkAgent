@@ -129,8 +129,7 @@ TEST(ReleaseJsonParser, RealisticPrettyPrinted) {
   EXPECT_TRUE(p.foundTag());
   EXPECT_TRUE(p.foundFirmware());
   EXPECT_STREQ(p.getTagName(), "v2.4.1");
-  EXPECT_STREQ(p.getFirmwareUrl(),
-               "https://github.com/Ash20pk/InkAgent/releases/download/v2.4.1/firmware.bin");
+  EXPECT_STREQ(p.getFirmwareUrl(), "https://github.com/Ash20pk/InkAgent/releases/download/v2.4.1/firmware.bin");
   EXPECT_EQ(p.getFirmwareSize(), 1572864u);
 }
 
@@ -141,8 +140,7 @@ TEST(ReleaseJsonParser, RealisticMinified) {
   EXPECT_TRUE(p.foundTag());
   EXPECT_TRUE(p.foundFirmware());
   EXPECT_STREQ(p.getTagName(), "v2.4.1");
-  EXPECT_STREQ(p.getFirmwareUrl(),
-               "https://github.com/Ash20pk/InkAgent/releases/download/v2.4.1/firmware.bin");
+  EXPECT_STREQ(p.getFirmwareUrl(), "https://github.com/Ash20pk/InkAgent/releases/download/v2.4.1/firmware.bin");
   EXPECT_EQ(p.getFirmwareSize(), 1572864u);
 }
 
@@ -267,8 +265,7 @@ TEST(ReleaseJsonParser, ChunkedFeedingSmallChunks) {
   EXPECT_TRUE(p.foundTag());
   EXPECT_TRUE(p.foundFirmware());
   EXPECT_STREQ(p.getTagName(), "v2.4.1");
-  EXPECT_STREQ(p.getFirmwareUrl(),
-               "https://github.com/Ash20pk/InkAgent/releases/download/v2.4.1/firmware.bin");
+  EXPECT_STREQ(p.getFirmwareUrl(), "https://github.com/Ash20pk/InkAgent/releases/download/v2.4.1/firmware.bin");
   EXPECT_EQ(p.getFirmwareSize(), 1572864u);
 }
 
@@ -290,8 +287,7 @@ TEST(ReleaseJsonParser, ChunkedFeedingVariousChunkSizes) {
     EXPECT_TRUE(p.foundTag()) << "chunkSize=" << chunkSize;
     EXPECT_TRUE(p.foundFirmware()) << "chunkSize=" << chunkSize;
     EXPECT_STREQ(p.getTagName(), "v2.4.1") << "chunkSize=" << chunkSize;
-    EXPECT_STREQ(p.getFirmwareUrl(),
-                 "https://github.com/Ash20pk/InkAgent/releases/download/v2.4.1/firmware.bin")
+    EXPECT_STREQ(p.getFirmwareUrl(), "https://github.com/Ash20pk/InkAgent/releases/download/v2.4.1/firmware.bin")
         << "chunkSize=" << chunkSize;
     EXPECT_EQ(p.getFirmwareSize(), 1572864u) << "chunkSize=" << chunkSize;
   }

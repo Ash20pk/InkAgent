@@ -6,9 +6,9 @@
 
 #include <algorithm>
 
+#include "EpubReaderActivity.h"
 #include "InkAgentSettings.h"
 #include "InkAgentState.h"
-#include "EpubReaderActivity.h"
 #include "ReaderUtils.h"
 #include "RecentBooksStore.h"
 #include "SdCardFontSystem.h"

@@ -6,8 +6,8 @@
 #include <algorithm>
 #include <iterator>
 
-#include "InkAgentSettings.h"
 #include "I18nKeys.h"
+#include "InkAgentSettings.h"
 #include "MappedInputManager.h"
 #include "components/UITheme.h"
 

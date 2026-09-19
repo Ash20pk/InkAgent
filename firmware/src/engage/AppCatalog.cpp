@@ -94,8 +94,7 @@ std::vector<CatalogEntry> scanApps() {
   dir.close();
 
   // Stable order so the grid does not reshuffle between opens.
-  std::sort(apps.begin(), apps.end(),
-            [](const CatalogEntry& a, const CatalogEntry& b) { return a.name < b.name; });
+  std::sort(apps.begin(), apps.end(), [](const CatalogEntry& a, const CatalogEntry& b) { return a.name < b.name; });
   return apps;
 }
 

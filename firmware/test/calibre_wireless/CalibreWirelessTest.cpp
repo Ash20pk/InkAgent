@@ -124,8 +124,7 @@ TEST(CalibreSendBook, SurvivesAByteAtATime) {
   Capture c;
   calibre::Session s(config(), sinkFor(c), spaceFor(1 << 20, 1 << 19));
   const std::string body = "a book split across every possible boundary";
-  const std::string msg =
-      frame(R"([8,{"lpath":"x.epub","length":)" + std::to_string(body.size()) + "}]") + body;
+  const std::string msg = frame(R"([8,{"lpath":"x.epub","length":)" + std::to_string(body.size()) + "}]") + body;
   ASSERT_TRUE(feedInChunks(s, msg, 1));
   EXPECT_EQ(c.bytes, body);
   EXPECT_EQ(s.booksReceived(), 1);
@@ -136,8 +135,7 @@ TEST(CalibreSendBook, ResumesFramingAfterTheBookEnds) {
   calibre::Session s(config(), sinkFor(c), spaceFor(1 << 20, 1 << 19));
   const std::string body = "0123456789";
   // A book, then an ordinary framed message riding directly behind its last byte.
-  const std::string msg =
-      frame(R"([8,{"lpath":"y.epub","length":10}])") + body + frame("[5,{}]");
+  const std::string msg = frame(R"([8,{"lpath":"y.epub","length":10}])") + body + frame("[5,{}]");
   ASSERT_TRUE(feedInChunks(s, msg, 4));
   EXPECT_EQ(c.bytes, body);
   const std::string out = s.takeOutbound();

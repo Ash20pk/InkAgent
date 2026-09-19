@@ -282,8 +282,8 @@ void TxtReaderActivity::renderPage(GfxRenderer& renderer) {
         int x = cachedOrientedMarginLeft;
         const bool lineIsRtl = BidiUtils::startsWithRtl(line.c_str(), BidiUtils::RTL_PARAGRAPH_PROBE_DEPTH);
         uint8_t effectiveAlignment = cachedParagraphAlignment;
-        if (lineIsRtl && (effectiveAlignment == InkAgentSettings::LEFT_ALIGN ||
-                          effectiveAlignment == InkAgentSettings::JUSTIFIED)) {
+        if (lineIsRtl &&
+            (effectiveAlignment == InkAgentSettings::LEFT_ALIGN || effectiveAlignment == InkAgentSettings::JUSTIFIED)) {
           effectiveAlignment = InkAgentSettings::RIGHT_ALIGN;
         }
         const int textWidth = renderer.getTextAdvanceX(cachedFontId, line.c_str(), EpdFontFamily::REGULAR);

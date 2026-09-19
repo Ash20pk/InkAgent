@@ -53,8 +53,8 @@ class ProgressMapper {
    * @return InkAgent position
    */
   static InkAgentPosition toInkAgent(const std::shared_ptr<Epub>& epub, const SavedProgressPosition& savedPos,
-                                         GfxRenderer& renderer, int currentSpineIndex = -1,
-                                         int totalPagesInCurrentSpine = 0, int fallbackTotalPages = 0);
+                                     GfxRenderer& renderer, int currentSpineIndex = -1,
+                                     int totalPagesInCurrentSpine = 0, int fallbackTotalPages = 0);
 
   /**
    * Convert a rich InkAgent position (downloaded from a inkagent-sync
@@ -70,8 +70,8 @@ class ProgressMapper {
    *         should fall back to toInkAgent().
    */
   static std::optional<InkAgentPosition> fromRichPosition(const std::shared_ptr<Epub>& epub,
-                                                            const KOReaderRichPosition& rich, GfxRenderer& renderer,
-                                                            bool xpathAlreadyTried = false);
+                                                          const KOReaderRichPosition& rich, GfxRenderer& renderer,
+                                                          bool xpathAlreadyTried = false);
 
  private:
   /**

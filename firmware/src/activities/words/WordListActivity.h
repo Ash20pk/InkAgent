@@ -28,10 +28,10 @@ class WordListActivity final : public Activity {
 
  private:
   enum class Mode : uint8_t {
-    Review,   // a due word, hidden context, waiting for recall
-    Revealed, // context shown, waiting for the grade
-    Browse,   // the whole list
-    Done,     // queue emptied this session
+    Review,    // a due word, hidden context, waiting for recall
+    Revealed,  // context shown, waiting for the grade
+    Browse,    // the whole list
+    Done,      // queue emptied this session
   };
 
   Mode mode = Mode::Review;

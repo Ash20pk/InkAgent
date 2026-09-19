@@ -27,97 +27,97 @@ class GfxRenderer;
 //    drawing any chrome itself. Values are deliberately plain data so they can
 //    move to SD-card theme files later without touching app code.
 namespace CanvasMetrics {
-constexpr ThemeMetrics values = {// Matched to the header's clock: a digit in ubuntu_12 (the header title font)
-                                 // is 12x17, so a 12px-tall battery reads as undersized next to
-                                 // the time. 17 tall makes the glyph and the digits share a cap
-                                 // height; the width keeps the stock 1.25 aspect.
-                                 .batteryWidth = 26,
-                                 .batteryHeight = 18,
-                                 .topPadding = 13,
-                                 .batteryBarHeight = 24,
-                                 .headerHeight = 44,
-                                 .verticalSpacing = 8,
-                                 .previewPadding = 10,
-                                 .previewHeightPercent = 30,
-                                 .contentSidePadding = 16,
-                                 // Gapless square rows: a scroll moves whole rows and leaves no
-                                 // inter-row band to repaint.
-                                 .listRowHeight = 44,
-                                 .listWithSubtitleRowHeight = 66,
-                                 .listRowGap = 0,
-                                 .listRowRadius = 0,
-                                 .listInset = 0,
-                                 .listSidePadding = 16,
-                                 .listSelectionStyle = 2,  // underline: the cheapest selection to repaint
-                                 .listScrollWidth = 3,
-                                 .listScrollSide = 0,
-                                 .listTitleBold = false,
-                                 .headerSidePadding = 16,
-                                 .headerUnderlineSize = 1,
-                                 .headerTitleAlign = 0,  // left
-                                 .headerBatterySide = 0,
-                                 .headerBatteryDetached = false,
-                                 .menuRowHeight = 44,
-                                 .menuSpacing = 0,
-                                 .tabSpacing = 8,
-                                 .tabBarHeight = 44,
-                                 .tabPillFullSlot = false,
-                                 .scrollBarWidth = 3,
-                                 .scrollBarRightOffset = 4,
-                                 .homeTopPadding = 50,
-                                 .homeCoverHeight = 300,
-                                 .homeCoverTileHeight = 340,
-                                 .homeRecentBooksCount = 1,
-                                 .homeContinueReadingInMenu = false,
-                                 .homeMenuTopOffset = 16,
-                                 .buttonHintsHeight = 40,
-                                 .sideButtonHintsWidth = 30,
-                                 .progressBarHeight = 14,
-                                 .progressBarMarginTop = 1,
-                                 .statusBarHorizontalMargin = 5,
-                                 .statusBarVerticalMargin = 19,
-                                 .keyboardKeyHeight = 36,
-                                 .keyboardKeySpacing = 8,
-                                 .keyboardCenteredText = true,
-                                 .keyboardVerticalOffset = 0,
-                                 .keyboardTextFieldWidthPercent = 88,
-                                 .keyboardWidthPercent = 96,
-                                 // 0 centres the plate; see BaseTheme::drawPopup.
-                                 .popupTopOffsetRatio = 0.0f,
-                                 .popupMarginX = 18,
-                                 .popupMarginY = 12,
-                                 .popupFrameThickness = 1,
-                                 .popupCornerRadius = 0,
-                                 .popupTextBold = false,
-                                 // The plate is filled white (popupCornerRadius 0 takes the
-                                 // squared-off path), so the text has to be black. False here
-                                 // painted white on white: the popup looked empty because the
-                                 // word was there and invisible.
-                                 .popupTextInverted = true,
-                                 .popupTextBaselineOffsetY = -2,
-                                 .popupProgressBarHeight = 4,
-                                 .popupProgressDrawOutline = true,
-                                 .popupProgressClampPercent = true,
-                                 // Black on the white plate, for the same reason the text is:
-                                 // these read as "inverted" because they were set for a plate
-                                 // filled black, and on a white one they drew white on white.
-                                 .popupProgressFillInverted = true,
-                                 .popupProgressOutlineInverted = true,
-                                 .optionPopupItemSpacing = 4,
-                                 .optionPopupInnerPadding = 20,
-                                 .optionPopupSelectionVPadding = 8,
-                                 .optionPopupDialogSideMargin = 18,
-                                 .textFieldHorizontalPadding = 8,
-                                 .textFieldNormalThickness = 1,
-                                 .textFieldCursorThickness = 2,
-                                 .textFieldLineEndOffset = -1,
-                                 .controlRadius = 0,
-                                 .sheetRadius = 0,
-                                 .capsuleRadius = 0,
-                                 .homeHeaderShowsClock = true,
-                                 .homeCoverTopPadding = 16,
-                                 .headerStatusUsesTitleFont = true,
-                                 .headerBatteryBarStyle = true};
+constexpr ThemeMetrics values = {  // Matched to the header's clock: a digit in ubuntu_12 (the header title font)
+                                   // is 12x17, so a 12px-tall battery reads as undersized next to
+                                   // the time. 17 tall makes the glyph and the digits share a cap
+                                   // height; the width keeps the stock 1.25 aspect.
+    .batteryWidth = 26,
+    .batteryHeight = 18,
+    .topPadding = 13,
+    .batteryBarHeight = 24,
+    .headerHeight = 44,
+    .verticalSpacing = 8,
+    .previewPadding = 10,
+    .previewHeightPercent = 30,
+    .contentSidePadding = 16,
+    // Gapless square rows: a scroll moves whole rows and leaves no
+    // inter-row band to repaint.
+    .listRowHeight = 44,
+    .listWithSubtitleRowHeight = 66,
+    .listRowGap = 0,
+    .listRowRadius = 0,
+    .listInset = 0,
+    .listSidePadding = 16,
+    .listSelectionStyle = 2,  // underline: the cheapest selection to repaint
+    .listScrollWidth = 3,
+    .listScrollSide = 0,
+    .listTitleBold = false,
+    .headerSidePadding = 16,
+    .headerUnderlineSize = 1,
+    .headerTitleAlign = 0,  // left
+    .headerBatterySide = 0,
+    .headerBatteryDetached = false,
+    .menuRowHeight = 44,
+    .menuSpacing = 0,
+    .tabSpacing = 8,
+    .tabBarHeight = 44,
+    .tabPillFullSlot = false,
+    .scrollBarWidth = 3,
+    .scrollBarRightOffset = 4,
+    .homeTopPadding = 50,
+    .homeCoverHeight = 300,
+    .homeCoverTileHeight = 340,
+    .homeRecentBooksCount = 1,
+    .homeContinueReadingInMenu = false,
+    .homeMenuTopOffset = 16,
+    .buttonHintsHeight = 40,
+    .sideButtonHintsWidth = 30,
+    .progressBarHeight = 14,
+    .progressBarMarginTop = 1,
+    .statusBarHorizontalMargin = 5,
+    .statusBarVerticalMargin = 19,
+    .keyboardKeyHeight = 36,
+    .keyboardKeySpacing = 8,
+    .keyboardCenteredText = true,
+    .keyboardVerticalOffset = 0,
+    .keyboardTextFieldWidthPercent = 88,
+    .keyboardWidthPercent = 96,
+    // 0 centres the plate; see BaseTheme::drawPopup.
+    .popupTopOffsetRatio = 0.0f,
+    .popupMarginX = 18,
+    .popupMarginY = 12,
+    .popupFrameThickness = 1,
+    .popupCornerRadius = 0,
+    .popupTextBold = false,
+    // The plate is filled white (popupCornerRadius 0 takes the
+    // squared-off path), so the text has to be black. False here
+    // painted white on white: the popup looked empty because the
+    // word was there and invisible.
+    .popupTextInverted = true,
+    .popupTextBaselineOffsetY = -2,
+    .popupProgressBarHeight = 4,
+    .popupProgressDrawOutline = true,
+    .popupProgressClampPercent = true,
+    // Black on the white plate, for the same reason the text is:
+    // these read as "inverted" because they were set for a plate
+    // filled black, and on a white one they drew white on white.
+    .popupProgressFillInverted = true,
+    .popupProgressOutlineInverted = true,
+    .optionPopupItemSpacing = 4,
+    .optionPopupInnerPadding = 20,
+    .optionPopupSelectionVPadding = 8,
+    .optionPopupDialogSideMargin = 18,
+    .textFieldHorizontalPadding = 8,
+    .textFieldNormalThickness = 1,
+    .textFieldCursorThickness = 2,
+    .textFieldLineEndOffset = -1,
+    .controlRadius = 0,
+    .sheetRadius = 0,
+    .capsuleRadius = 0,
+    .homeHeaderShowsClock = true,
+    .homeCoverTopPadding = 16,
+    .headerStatusUsesTitleFont = true,
+    .headerBatteryBarStyle = true};
 }
 
 class CanvasTheme : public BaseTheme {

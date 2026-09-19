@@ -39,9 +39,7 @@ void ReadLaterActivity::onExit() {
   Activity::onExit();
 }
 
-std::string ReadLaterActivity::pathFor(const int index) const {
-  return std::string(FOLDER) + "/" + items[index];
-}
+std::string ReadLaterActivity::pathFor(const int index) const { return std::string(FOLDER) + "/" + items[index]; }
 
 void ReadLaterActivity::load() {
   items.clear();
@@ -100,14 +98,14 @@ void ReadLaterActivity::render(RenderLock&&) {
 
     for (int i = 0; i < rows && top + i < static_cast<int>(items.size()); i++) {
       const int rowY = startY + i * rowHeight;
-      const auto lines = renderer.wrappedText(UI_12_FONT_ID, items[top + i].c_str(),
-                                              pageWidth - metrics.contentSidePadding * 2, 1);
+      const auto lines =
+          renderer.wrappedText(UI_12_FONT_ID, items[top + i].c_str(), pageWidth - metrics.contentSidePadding * 2, 1);
       if (!lines.empty()) {
         renderer.drawText(UI_12_FONT_ID, metrics.contentSidePadding, rowY, lines.front().c_str());
       }
       if (top + i == selected) {
-        renderer.fillRect(metrics.contentSidePadding, rowY + rowHeight - 6,
-                          pageWidth - metrics.contentSidePadding * 2, 3);
+        renderer.fillRect(metrics.contentSidePadding, rowY + rowHeight - 6, pageWidth - metrics.contentSidePadding * 2,
+                          3);
       }
     }
   }
@@ -154,15 +152,16 @@ void ReadLaterActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
     const std::string victim = pathFor(selected);
     const std::string name = items[selected];
-    startActivityForResult(makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_READ_LATER_REMOVE), name),
-                           [this, victim](const ActivityResult& result) {
-                             if (!result.isCancelled) {
-                               if (!Storage.remove(victim.c_str())) {
-                                 LOG_ERR("READLATER", "could not remove %s", victim.c_str());
-                               }
-                               load();
-                             }
-                             requestUpdate();
-                           });
+    startActivityForResult(
+        makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_READ_LATER_REMOVE), name),
+        [this, victim](const ActivityResult& result) {
+          if (!result.isCancelled) {
+            if (!Storage.remove(victim.c_str())) {
+              LOG_ERR("READLATER", "could not remove %s", victim.c_str());
+            }
+            load();
+          }
+          requestUpdate();
+        });
   }
 }

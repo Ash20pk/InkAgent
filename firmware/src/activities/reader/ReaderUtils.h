@@ -1,9 +1,9 @@
 #pragma once
 
-#include <InkAgentSettings.h>
 #include <GfxRenderer.h>
 #include <HalGPIO.h>
 #include <HalTiltSensor.h>
+#include <InkAgentSettings.h>
 #include <Logging.h>
 #include <components/bars/tap-zones.h>
 
@@ -200,9 +200,7 @@ inline void displayBaseWithRefreshCycle(const GfxRenderer& renderer, int& pagesU
 // the weight is worth having.
 class TextWeightScope {
  public:
-  TextWeightScope(GfxRenderer& renderer, const int pixels) : renderer(renderer) {
-    renderer.setTextEmbolden(pixels);
-  }
+  TextWeightScope(GfxRenderer& renderer, const int pixels) : renderer(renderer) { renderer.setTextEmbolden(pixels); }
   ~TextWeightScope() { renderer.setTextEmbolden(0); }
   TextWeightScope(const TextWeightScope&) = delete;
   TextWeightScope& operator=(const TextWeightScope&) = delete;

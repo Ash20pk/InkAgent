@@ -5,7 +5,6 @@
 #include <Logging.h>
 #include <Memory.h>
 #include <WiFi.h>
-
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
 #include <freertos/semphr.h>

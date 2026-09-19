@@ -8,8 +8,8 @@ enum class ProgressComparison : uint8_t { LocalAhead, Synchronized, RemoteAhead,
 
 enum class RemoteRecordChoice : uint8_t { Primary, Alternate };
 
-ProgressComparison compareProgress(const InkAgentPosition& local, float localPercentage,
-                                   const InkAgentPosition& remote, float remotePercentage);
+ProgressComparison compareProgress(const InkAgentPosition& local, float localPercentage, const InkAgentPosition& remote,
+                                   float remotePercentage);
 
 RemoteRecordChoice selectRemoteRecord(const InkAgentPosition& primary, float primaryPercentage,
                                       const InkAgentPosition& alternate, float alternatePercentage);

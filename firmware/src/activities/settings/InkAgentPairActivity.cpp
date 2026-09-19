@@ -70,8 +70,8 @@ void InkAgentPairActivity::startPairing() {
   if (!pairing.ok) {
     char heap[48];
     InkAgentClient::heapSummary(heap, sizeof(heap));
-    statusMessage = std::string(tr(STR_ASK_RELAY_UNREACHABLE)) + " (code " + std::to_string(InkAgentClient::lastHttpCode) +
-                    ", " + heap + ")";
+    statusMessage = std::string(tr(STR_ASK_RELAY_UNREACHABLE)) + " (code " +
+                    std::to_string(InkAgentClient::lastHttpCode) + ", " + heap + ")";
     LOG_ERR(kTag, "%s %s", statusMessage.c_str(), INKAGENT_STORE.getRelayUrl().c_str());
     state = State::Error;
     requestUpdate();
@@ -117,7 +117,10 @@ void InkAgentPairActivity::loop() {
   const bool confirm = mappedInput.wasReleased(MappedInputManager::Button::Confirm);
   switch (state) {
     case State::PairWait:
-      if (back) { finish(); return; }
+      if (back) {
+        finish();
+        return;
+      }
       if (millis() >= nextPollAt) pollPairing();
       return;
     case State::Done:
@@ -162,10 +165,17 @@ void InkAgentPairActivity::renderPairing() {
 
 void InkAgentPairActivity::render(RenderLock&&) {
   switch (state) {
-    case State::PairStart: renderStatus(tr(STR_ASK_CONNECTING)); return;
-    case State::PairWait: renderPairing(); return;
+    case State::PairStart:
+      renderStatus(tr(STR_ASK_CONNECTING));
+      return;
+    case State::PairWait:
+      renderPairing();
+      return;
     case State::Done:
-    case State::Error: renderStatus(statusMessage.c_str()); return;
-    default: return;  // Wi-Fi selection owns the screen
+    case State::Error:
+      renderStatus(statusMessage.c_str());
+      return;
+    default:
+      return;  // Wi-Fi selection owns the screen
   }
 }

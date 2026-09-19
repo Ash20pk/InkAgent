@@ -59,10 +59,9 @@ int appCount();
 //   INKAGENT_REGISTER_APP(HelloWorldApp, "Hello", &icon_apps_32);
 // Allocation is nothrow: a failed app launch returns null and the drawer stays
 // put rather than aborting the firmware.
-#define INKAGENT_REGISTER_APP(Class, DisplayName, IconPtr)                                            \
-  static std::unique_ptr<Activity> Class##_inkAppCreate(GfxRenderer& renderer,                        \
-                                                        MappedInputManager& mappedInput) {            \
-    return makeUniqueNoThrow<Class>(renderer, mappedInput);                                           \
-  }                                                                                                   \
-  static inkapp::AppInfo Class##_inkAppInfo = {DisplayName, IconPtr, &Class##_inkAppCreate, nullptr}; \
+#define INKAGENT_REGISTER_APP(Class, DisplayName, IconPtr)                                                        \
+  static std::unique_ptr<Activity> Class##_inkAppCreate(GfxRenderer& renderer, MappedInputManager& mappedInput) { \
+    return makeUniqueNoThrow<Class>(renderer, mappedInput);                                                       \
+  }                                                                                                               \
+  static inkapp::AppInfo Class##_inkAppInfo = {DisplayName, IconPtr, &Class##_inkAppCreate, nullptr};             \
   static const inkapp::Registrar Class##_inkAppRegistrar(&Class##_inkAppInfo)

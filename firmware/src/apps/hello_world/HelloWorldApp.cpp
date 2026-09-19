@@ -31,8 +31,8 @@ void HelloWorldApp::render(RenderLock&&) {
   GUI.drawHeader(renderer, Rect{0, metrics.topPadding, pageWidth, metrics.headerHeight}, "Hello");
 
   const int centreY = renderer.getScreenHeight() / 2;
-  UITheme::drawCenteredText(renderer, Rect{0, centreY, pageWidth, renderer.getLineHeight(UI_12_FONT_ID)},
-                            UI_12_FONT_ID, centreY, "Hello from an InkAgent app");
+  UITheme::drawCenteredText(renderer, Rect{0, centreY, pageWidth, renderer.getLineHeight(UI_12_FONT_ID)}, UI_12_FONT_ID,
+                            centreY, "Hello from an InkAgent app");
 
   const std::string counter = "Confirm pressed " + std::to_string(taps) + " times";
   const int counterY = centreY + renderer.getLineHeight(UI_12_FONT_ID) + metrics.verticalSpacing;

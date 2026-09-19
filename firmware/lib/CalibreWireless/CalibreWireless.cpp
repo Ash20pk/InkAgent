@@ -15,11 +15,21 @@ constexpr char kClientString[] = "calibre wireless device client";
 void appendEscaped(std::string& out, const char* s) {
   for (const char* p = s; *p; ++p) {
     switch (*p) {
-      case '"': out += "\\\""; break;
-      case '\\': out += "\\\\"; break;
-      case '\n': out += "\\n"; break;
-      case '\r': out += "\\r"; break;
-      case '\t': out += "\\t"; break;
+      case '"':
+        out += "\\\"";
+        break;
+      case '\\':
+        out += "\\\\";
+        break;
+      case '\n':
+        out += "\\n";
+        break;
+      case '\r':
+        out += "\\r";
+        break;
+      case '\t':
+        out += "\\t";
+        break;
       default:
         // Control characters must be escaped; everything else (UTF-8 included)
         // passes through as bytes.
@@ -36,12 +46,17 @@ void appendEscaped(std::string& out, const char* s) {
 
 void kv(std::string& out, const char* key, const char* value, bool first = false) {
   if (!first) out += ',';
-  out += '"'; appendEscaped(out, key); out += "\":\"";
-  appendEscaped(out, value); out += '"';
+  out += '"';
+  appendEscaped(out, key);
+  out += "\":\"";
+  appendEscaped(out, value);
+  out += '"';
 }
 void kvRaw(std::string& out, const char* key, const char* raw, bool first = false) {
   if (!first) out += ',';
-  out += '"'; appendEscaped(out, key); out += "\":";
+  out += '"';
+  appendEscaped(out, key);
+  out += "\":";
   out += raw;
 }
 void kvNum(std::string& out, const char* key, long long value, bool first = false) {
@@ -108,8 +123,10 @@ void Session::onKey(void* ctx, const char* key, const size_t len) {
 
 void Session::onString(void* ctx, const char* value, const size_t len) {
   auto* s = static_cast<Session*>(ctx);
-  if (s->lastKey == "lpath") s->lpath.assign(value, len);
-  else if (s->lastKey == "passwordChallenge") s->passwordChallenge.assign(value, len);
+  if (s->lastKey == "lpath")
+    s->lpath.assign(value, len);
+  else if (s->lastKey == "passwordChallenge")
+    s->passwordChallenge.assign(value, len);
   s->lastKey.clear();
 }
 
@@ -206,12 +223,18 @@ void Session::dispatch(const int op) {
     case Op::SEND_BOOK: {
       // The metadata frame. The book's bytes follow it raw and unframed, so the
       // OK goes out first and the socket switches to counting them.
-      if (lpath.empty()) { fail("SEND_BOOK without an lpath"); return; }
+      if (lpath.empty()) {
+        fail("SEND_BOOK without an lpath");
+        return;
+      }
       bookPath = lpath;
       bookBytes = declaredLength;
       bookSoFar = 0;
       bookOpen = sink.open ? sink.open(bookPath, bookBytes) : false;
-      if (!bookOpen) { fail("could not open the destination file"); return; }
+      if (!bookOpen) {
+        fail("could not open the destination file");
+        return;
+      }
       phase = Phase::BOOK_BYTES;
       j = "[0,{";
       kvNum(j, "bookStarted", 1, true);
@@ -282,12 +305,21 @@ bool Session::feed(const uint8_t* data, const size_t len) {
     if (open == std::string::npos) {
       // Guard against a peer that never sends a '[': the length prefix for any
       // real message is a handful of digits.
-      if (inbound.size() > 24) { fail("no frame marker in the length prefix"); return false; }
+      if (inbound.size() > 24) {
+        fail("no frame marker in the length prefix");
+        return false;
+      }
       continue;
     }
-    if (open == 0) { fail("frame had no length prefix"); return false; }
+    if (open == 0) {
+      fail("frame had no length prefix");
+      return false;
+    }
     const size_t total = static_cast<size_t>(strtoul(inbound.substr(0, open).c_str(), nullptr, 10));
-    if (total == 0) { fail("frame length was not a number"); return false; }
+    if (total == 0) {
+      fail("frame length was not a number");
+      return false;
+    }
     if (inbound.size() - open < total) continue;  // more bytes still to come
 
     const std::string json = inbound.substr(open, total);
@@ -308,7 +340,10 @@ bool Session::feed(const uint8_t* data, const size_t len) {
     cb.onArrayStart = &Session::onArrayStart;
     StreamingJsonParser parser(cb);
     parser.feed(json.c_str(), json.size());
-    if (parser.hasError() || !sawOpcode) { fail("could not parse a message from Calibre"); return false; }
+    if (parser.hasError() || !sawOpcode) {
+      fail("could not parse a message from Calibre");
+      return false;
+    }
 
     dispatch(opcode);
     if (!errorText.empty()) return false;

@@ -36,7 +36,10 @@ class InkAgentStore : public PersistableStore<InkAgentStore> {
 
   // Load from SD once per boot; callers that only read (reader menu) use this.
   void ensureLoaded() {
-    if (!loaded) { loadFromFile(); loaded = true; }
+    if (!loaded) {
+      loadFromFile();
+      loaded = true;
+    }
   }
   bool isPaired() const { return !deviceToken.empty(); }
   const std::string& getDeviceToken() const { return deviceToken; }

@@ -49,9 +49,7 @@ TEST(Pace, ExtremesAreClampedRatherThanOverflowing) {
   EXPECT_GE(comparePct(60000, 1, 10), 1) << "never zero or negative";
 }
 
-TEST(Pace, TheFirstSessionBecomesTheBaseline) {
-  EXPECT_EQ(fold(0, 30000, 0), 30000u);
-}
+TEST(Pace, TheFirstSessionBecomesTheBaseline) { EXPECT_EQ(fold(0, 30000, 0), 30000u); }
 
 TEST(Pace, TheBaselineMovesTowardsNewSessionsButNotAllTheWay) {
   const uint32_t before = 20000;
@@ -80,6 +78,4 @@ TEST(Pace, ASlowSessionNeverUnderflows) {
   EXPECT_GT(fold(60000, 1, 5), 0u);
 }
 
-TEST(Pace, AnEmptySessionLeavesTheBaselineAlone) {
-  EXPECT_EQ(fold(25000, 0, 5), 25000u);
-}
+TEST(Pace, AnEmptySessionLeavesTheBaselineAlone) { EXPECT_EQ(fold(25000, 0, 5), 25000u); }

@@ -27,9 +27,7 @@ constexpr int buildMonth() {
                               : 12;
 }
 
-constexpr int buildDay() {
-  return (__DATE__[4] == ' ' ? 0 : (__DATE__[4] - '0') * 10) + (__DATE__[5] - '0');
-}
+constexpr int buildDay() { return (__DATE__[4] == ' ' ? 0 : (__DATE__[4] - '0') * 10) + (__DATE__[5] - '0'); }
 
 // days_from_civil, shifted to a 2000-01-01 epoch — the same arithmetic
 // HalClock::dayNumber() uses, so the two are directly comparable.

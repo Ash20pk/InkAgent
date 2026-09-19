@@ -31,9 +31,9 @@ class PeerSendActivity final : public Activity {
 
  private:
   enum class State : uint8_t {
-    Scanning,   // looking for a reader that is receiving
-    NotFound,   // none in range
-    Sending,    // joined, streaming the file
+    Scanning,  // looking for a reader that is receiving
+    NotFound,  // none in range
+    Sending,   // joined, streaming the file
     Done,
     Failed,
   };
