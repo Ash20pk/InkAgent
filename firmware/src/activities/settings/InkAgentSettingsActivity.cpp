@@ -34,7 +34,10 @@ InkAgentSettingsActivity::InkAgentSettingsActivity(GfxRenderer& renderer, Mapped
 
 int InkAgentSettingsActivity::listCount() const { return MENU_ITEMS; }
 
-const char* InkAgentSettingsActivity::headerTitle() const { return tr(STR_ASK_BOOK); }
+// The settings screen is named for what it does — point the reader at a relay
+// and pair it — not for the reading feature that consumes it. "Ask the book"
+// stays the name of the action in the reader's own menu.
+const char* InkAgentSettingsActivity::headerTitle() const { return tr(STR_CONFIGURE_RELAY); }
 
 void InkAgentSettingsActivity::activateIndex(const int index) {
   app.clearTapFlash();

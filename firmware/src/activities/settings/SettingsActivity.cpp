@@ -88,7 +88,7 @@ void SettingsActivity::rebuildSettingsLists() {
   }
   systemSettings.push_back(SettingInfo::Action(StrId::STR_WIFI_NETWORKS, SettingAction::Network));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_KOREADER_SYNC, SettingAction::KOReaderSync));
-  systemSettings.push_back(SettingInfo::Action(StrId::STR_ASK_BOOK, SettingAction::AskBook));
+  systemSettings.push_back(SettingInfo::Action(StrId::STR_CONFIGURE_RELAY, SettingAction::AskBook));
   systemSettings.push_back(SettingInfo::Action(StrId::STR_OPDS_SERVERS, SettingAction::OPDSBrowser));
   // Getting books onto the device. These used to hang off Home and then the app
   // drawer; the drawer is for reading, so the ways of filling it live here.
