@@ -54,10 +54,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install clang-format 21
-        run: |
-          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 21
-          sudo apt-get install -y clang-format-21
+      # The exact version, from pip so it is identical on every platform.
+      # clang-format's output changes between majors, so a floor ("21 or newer")
+      # makes CI and a contributor on 23 disagree with each other forever.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install clang-format
+        run: pip install clang-format==21.1.2
       - name: Check formatting
         working-directory: firmware
         run: |
@@ -93,6 +97,12 @@ jobs:
           restore-keys: pio-${{ matrix.env }}-
       - name: Install PlatformIO
         run: pip install --upgrade platformio
+      # tool-scons is resolved from the registry at build time, not pinned by
+      # the Core version, and 4.9 dropped SCons.Tool.FortranCommon which the
+      # pioarduino custom-SDK rebuild still imports. Pin the version that is
+      # known good (ModuleNotFoundError at link, only on firmware_tuned envs).
+      - name: Pin SCons
+        run: pio pkg install --global --tool "tool-scons@4.40801.0"
       - name: Build
         working-directory: firmware
         run: pio run -e ${{ matrix.env }}

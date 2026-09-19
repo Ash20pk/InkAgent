@@ -1,13 +1,25 @@
 #!/usr/bin/env bash
 
+# Formatting must be byte-identical everywhere, so the version is pinned exactly
+# rather than as a floor. clang-format's output changes between major versions:
+# with a ">= 21" rule, someone on 22 or 23 reformats the tree, CI on 21 reformats
+# it back, and both are "correct". Install the pin with:
+#
+#   pip install clang-format==21.1.2
+#
+# Set CLANG_FORMAT to point at a specific binary if it is not on PATH.
+REQUIRED_MAJOR=21
+
 # Check if clang-format is available and pick the preferred binary.
-if command -v clang-format-21 >/dev/null 2>&1; then
+if [[ -n "${CLANG_FORMAT:-}" ]]; then
+  CLANG_FORMAT_BIN="${CLANG_FORMAT}"
+elif command -v clang-format-21 >/dev/null 2>&1; then
   CLANG_FORMAT_BIN="clang-format-21"
 elif command -v clang-format >/dev/null 2>&1; then
   CLANG_FORMAT_BIN="clang-format"
 else
   printf "'clang-format' not found in current environment\n"
-  printf "Install clang-format-21 (recommended), clang, clang-tools, or clang-format depending on your distro/os and tooling requirements\n"
+  printf "Install the pinned version: pip install clang-format==21.1.2\n"
   exit 1
 fi
 
@@ -22,11 +34,12 @@ fi
 CLANG_FORMAT_VERSION_RAW="$(${CLANG_FORMAT_BIN} --version)"
 CLANG_FORMAT_MAJOR="$(printf '%s\n' "${CLANG_FORMAT_VERSION_RAW}" | grep -oE '[0-9]+' | head -n1)"
 
-# Guard against local binaries older than the repo formatting config.
-if [[ -z "${CLANG_FORMAT_MAJOR}" || "${CLANG_FORMAT_MAJOR}" -lt 21 ]]; then
-  echo "Error: ${CLANG_FORMAT_BIN} is too old: ${CLANG_FORMAT_VERSION_RAW}"
-  echo "This repository's .clang-format requires clang-format 21 or newer."
-  echo "Install clang-format-21 and rerun ./bin/clang-format-fix"
+# Guard against any version but the pin: output differs between majors.
+if [[ -z "${CLANG_FORMAT_MAJOR}" || "${CLANG_FORMAT_MAJOR}" -ne "${REQUIRED_MAJOR}" ]]; then
+  echo "Error: ${CLANG_FORMAT_BIN} is ${CLANG_FORMAT_VERSION_RAW}"
+  echo "This repository pins clang-format ${REQUIRED_MAJOR}. Install it with:"
+  echo "  pip install clang-format==21.1.2"
+  echo "then rerun ./bin/clang-format-fix (or set CLANG_FORMAT to that binary)."
   exit 1
 fi
 
