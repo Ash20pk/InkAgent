@@ -139,8 +139,35 @@ void HalGPIO::begin() {
   inputMgr.begin();
 }
 
+#if INKAGENT_SERIAL_INPUT
+void HalGPIO::injectPress(const uint8_t buttonIndex) {
+  if (injectQueued >= kInjectQueueLen) return;  // drop rather than block the caller
+  injectQueue[injectQueued++] = buttonIndex;
+}
+
+void HalGPIO::advanceInjection() {
+  if (injectPhase == 1) {
+    injectPhase = 2;  // the release frame
+    return;
+  }
+  if (injectPhase == 2) {
+    injectPhase = 0;
+    injectButton = kNoInject;
+  }
+  if (injectPhase == 0 && injectQueued > 0) {
+    injectButton = injectQueue[0];
+    for (uint8_t i = 1; i < injectQueued; i++) injectQueue[i - 1] = injectQueue[i];
+    injectQueued--;
+    injectPhase = 1;  // the press frame
+  }
+}
+#endif
+
 void HalGPIO::update() {
   inputMgr.update();
+#if INKAGENT_SERIAL_INPUT
+  advanceInjection();
+#endif
   const bool connected = isUsbConnected();
   usbStateChanged = (connected != lastUsbConnected);
   lastUsbConnected = connected;
@@ -148,15 +175,40 @@ void HalGPIO::update() {
 
 bool HalGPIO::wasUsbStateChanged() const { return usbStateChanged; }
 
-bool HalGPIO::isPressed(uint8_t buttonIndex) const { return inputMgr.isPressed(buttonIndex); }
+bool HalGPIO::isPressed(uint8_t buttonIndex) const {
+#if INKAGENT_SERIAL_INPUT
+  if (injectedPressed(buttonIndex)) return true;
+#endif
+  return inputMgr.isPressed(buttonIndex);
+}
 
-bool HalGPIO::wasPressed(uint8_t buttonIndex) const { return inputMgr.wasPressed(buttonIndex); }
+bool HalGPIO::wasPressed(uint8_t buttonIndex) const {
+#if INKAGENT_SERIAL_INPUT
+  if (injectedPressed(buttonIndex)) return true;
+#endif
+  return inputMgr.wasPressed(buttonIndex);
+}
 
-bool HalGPIO::wasAnyPressed() const { return inputMgr.wasAnyPressed(); }
+bool HalGPIO::wasAnyPressed() const {
+#if INKAGENT_SERIAL_INPUT
+  if (injectPhase == 1) return true;
+#endif
+  return inputMgr.wasAnyPressed();
+}
 
-bool HalGPIO::wasReleased(uint8_t buttonIndex) const { return inputMgr.wasReleased(buttonIndex); }
+bool HalGPIO::wasReleased(uint8_t buttonIndex) const {
+#if INKAGENT_SERIAL_INPUT
+  if (injectedReleased(buttonIndex)) return true;
+#endif
+  return inputMgr.wasReleased(buttonIndex);
+}
 
-bool HalGPIO::wasAnyReleased() const { return inputMgr.wasAnyReleased(); }
+bool HalGPIO::wasAnyReleased() const {
+#if INKAGENT_SERIAL_INPUT
+  if (injectPhase == 2) return true;
+#endif
+  return inputMgr.wasAnyReleased();
+}
 
 bool HalGPIO::rawInputActive() {
   if (inputMgr.isPowerButtonPhysicallyPressed()) return true;
