@@ -79,7 +79,24 @@ jobs:
       matrix:
         # inkagent-check compiles the [env:default] sources without the custom
         # SDK rebuild, which is what makes a firmware compile viable in CI.
-        env: [inkagent-check, sticky, x4pro, x4c, papermono]
+        env: [inkagent-check, x4pro, x4c, papermono]
+        blocking: [true]
+        include:
+          # sticky is the only firmware_tuned environment here, and the only one
+          # that fails: after the ESP-IDF core rebuild completes, the nested
+          # Arduino compile dies with
+          #   ModuleNotFoundError: No module named 'SCons.Tool.FortranCommon'
+          # even though the pinned tool-scons 4.8.1 demonstrably contains that
+          # module (checked in both the pioarduino and the platformio builds of
+          # the package). Something in that nested invocation resolves a
+          # different SCons and we do not yet know which.
+          #
+          # Non-blocking rather than deleted: the build still runs and still
+          # reports, so the diagnostic below keeps arriving and the day it
+          # passes we flip this back. Blocking on a failure we cannot explain
+          # would only teach people to ignore a red main.
+          - env: sticky
+            blocking: false
     steps:
       - uses: actions/checkout@v4
         with:
@@ -108,6 +125,23 @@ jobs:
       # requirement mid-build and uninstalls the pin.
       - name: Install PlatformIO
         run: pip install "platformio==6.1.19"
+      # Which SCons actually answers, and whether it has the module the
+      # nested Arduino compile cannot find. Cheap, and it turns the sticky
+      # failure into evidence instead of another guess.
+      - name: SCons diagnostic
+        working-directory: firmware
+        continue-on-error: true
+        run: |
+          echo "--- pio core ---"; pio --version
+          echo "--- tool-scons packages ---"
+          find ~/.platformio/packages -maxdepth 1 -name 'tool-scons*' -exec cat {}/.piopm \; 2>/dev/null || true
+          echo "--- FortranCommon present? ---"
+          find ~/.platformio/packages -name 'FortranCommon*' 2>/dev/null | head
+          echo "--- any other SCons on this runner ---"
+          python -c "import SCons, os; print('python SCons', SCons.__version__, os.path.dirname(SCons.__file__))" 2>&1 | tail -1
+          pip list 2>/dev/null | grep -i scons || echo "no pip scons"
+
       - name: Build
         working-directory: firmware
+        continue-on-error: ${{ !matrix.blocking }}
         run: pio run -e ${{ matrix.env }}
