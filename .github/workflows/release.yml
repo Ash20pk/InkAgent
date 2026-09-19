@@ -1,0 +1,101 @@
+name: Release
+
+# Prebuilt firmware so that owning a board is enough to try InkAgent — no
+# PlatformIO, no toolchain. Tag a release (v0.1.0) to publish.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  firmware:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - env: gh_release
+            name: xteink-x3-x4
+            chip: esp32c3
+          - env: x4c-gh_release
+            name: xteink-x4-classic
+            chip: esp32s3
+          - env: x4pro-gh_release
+            name: xteink-x4-pro
+            chip: esp32s3
+          - env: sticky-gh_release
+            name: seeed-sticky
+            chip: esp32s3
+          - env: papermono-gh_release
+            name: m5stack-paper-mono
+            chip: esp32s3
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio esptool
+
+      - name: Build
+        working-directory: firmware
+        run: pio run -e ${{ matrix.env }}
+
+      # A single-file image so the flash command is one line and the offsets are
+      # not something a first-time flasher has to get right.
+      - name: Merge image
+        working-directory: firmware
+        run: |
+          B=.pio/build/${{ matrix.env }}
+          esptool.py --chip ${{ matrix.chip }} merge_bin \
+            -o inkagent-${{ matrix.name }}.bin \
+            --flash_mode dio --flash_size 16MB \
+            0x0     "$B/bootloader.bin" \
+            0x8000  "$B/partitions.bin" \
+            0x10000 "$B/firmware.bin"
+          cp "$B/firmware.bin" inkagent-${{ matrix.name }}-app-only.bin
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: inkagent-${{ matrix.name }}
+          path: firmware/inkagent-${{ matrix.name }}*.bin
+
+  publish:
+    name: Publish release
+    needs: firmware
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum *.bin > SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          body: |
+            ## Flashing
+
+            Full image, one command (replace the port):
+
+            ```sh
+            esptool.py --chip <esp32c3|esp32s3> --port /dev/ttyUSB0 \
+              write_flash 0x0 inkagent-<board>.bin
+            ```
+
+            `*-app-only.bin` is the application partition alone, for updating an
+            existing InkAgent install at offset `0x10000`.
+
+            Which file for which board is in the asset name. If you are unsure
+            which board you have, see `docs/troubleshooting.md`.
+
+            Verify with `SHA256SUMS`.

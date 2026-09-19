@@ -1,0 +1,8 @@
+node_modules/
+out/
+# The two tracks are generated from audio/ — the generators are the source, the
+# WAVs are not. `npm run audio` rebuilds them.
+public/vo.wav
+public/score.wav
+audio/.vo/
+audio/cues.npy

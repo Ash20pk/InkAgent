@@ -13,7 +13,7 @@ The web server is available while the device is in **File Transfer** or
 - Edit many device settings from a browser
 - Manage saved Wi-Fi networks and OPDS servers
 - Upload and delete `.cpfont` SD-card font families
-- Accept WebDAV clients and Calibre wireless uploads
+- Accept WebDAV clients
 
 The server does not require authentication. Use it only on trusted private
 networks or in hotspot mode when you control who is connected.
@@ -26,7 +26,7 @@ networks or in hotspot mode when you control who is connected.
 | Mode | Use when |
 |------|----------|
 | **Join Network** | You want the reader to join an existing Wi-Fi network. |
-| **Calibre Wireless** | You want to receive books from the InkAgent Calibre plugin workflow. |
+| **Calibre Wireless** | Moved: it no longer uses this server. See below. |
 | **Create Hotspot** | You want the reader to create its own open Wi-Fi network. |
 
 ## Join Network Mode
@@ -67,10 +67,21 @@ opening the web interface.
 
 ## Calibre Wireless Mode
 
-Calibre Wireless starts the same web server in station mode, then displays setup
-instructions and upload progress on the reader. Use this mode with the
-InkAgent Calibre plugin or other clients that speak the documented WebSocket
-upload protocol.
+**This no longer uses the web server.** Calibre Wireless now speaks Calibre's own
+smart-device protocol (`lib/CalibreWireless`), so stock Calibre drives the reader
+directly and no plugin is needed at either end.
+
+The connection runs the other way round from every other transfer path here:
+Calibre listens (port 9090 by default) and the reader dials out. The reader
+broadcasts `hi there` over UDP to Calibre's five discovery ports, reads the
+reply naming the driver's port, then opens the TCP connection and answers
+whatever Calibre asks.
+
+To use it: in Calibre, **Connect/share > Start wireless device connection**, then
+open **Calibre Wireless** on the reader and send books with **Send to device**.
+Books land in `/Books`. A password set on Calibre's side is not supported —
+answering its challenge needs SHA1 over a shared secret the reader has nowhere
+to store.
 
 For Calibre OPDS browsing, add `/opds` to the catalog URL when configuring an
 OPDS server.

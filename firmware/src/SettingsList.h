@@ -417,7 +417,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
               KOREADER_STORE.saveToFile();
             },
             "koSyncBehavior", StrId::STR_KOREADER_SYNC),
-        // --- Ask the book (InkAgent relay; device UI is InkAgentSettingsActivity) ---
+        // --- Configure Relay (InkAgent relay; device UI is InkAgentSettingsActivity) ---
         SettingInfo::DynamicString(
             StrId::STR_ASK_RELAY_URL, [] { return INKAGENT_STORE.getRelayUrl(); },
             [](const std::string& v) {
@@ -425,7 +425,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
               INKAGENT_STORE.setRelayUrl(v);
               INKAGENT_STORE.saveToFile();
             },
-            "inkRelayUrl", StrId::STR_ASK_BOOK),
+            "inkRelayUrl", StrId::STR_CONFIGURE_RELAY),
         // --- Status Bar Settings (web-only, uses StatusBarSettingsActivity) ---
         SettingInfo::Toggle(StrId::STR_CHAPTER_PAGE_COUNT, &InkAgentSettings::statusBarChapterPageCount,
                             "statusBarChapterPageCount", StrId::STR_CUSTOMISE_STATUS_BAR),

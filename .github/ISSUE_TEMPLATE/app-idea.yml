@@ -1,0 +1,48 @@
+name: Manifest app idea
+description: An app for the drawer, described as a manifest.
+labels: [app]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Manifest apps are **declarative and have no control flow** — no `if`,
+        `when`, `unless`, `repeat` or `each`, and the relay validator rejects
+        them by name. Row kinds are `text`, `para`, `kv`, `rule`, `logo`; values
+        come from a fixed whitelist of data sources. This is a deliberate limit,
+        not a missing feature. Read `docs/APP_DEVELOPMENT.md` first.
+
+        If your idea needs logic, say so plainly — that is useful information
+        about where the format falls short, and it is how `para` got added.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What the app shows
+    validations: { required: true }
+
+  - type: textarea
+    id: manifest
+    attributes:
+      label: Sketch of the manifest
+      render: json
+      placeholder: |
+        { "name": "…", "icon": "…", "rows": [ { "kind": "kv", "label": "…", "value": "…" } ] }
+
+  - type: textarea
+    id: sources
+    attributes:
+      label: Data sources it needs
+      description: >-
+        From the existing set (`device.*`, `reading.*`, `review.word`,
+        `i18n.about`) or new ones. New sources need a reason the app cannot work
+        without them.
+
+  - type: checkboxes
+    id: limits
+    attributes:
+      label: Checks
+      options:
+        - label: It terminates — there is no feed, no unread count, and nothing that notifies.
+          required: true
+        - label: It does not need control flow, or I have said above why it does.
+          required: true

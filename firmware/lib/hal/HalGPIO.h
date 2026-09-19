@@ -69,6 +69,33 @@ class HalGPIO {
   // Start button GPIO and setup SPI for screen and SD card
   void begin();
 
+#if INKAGENT_SERIAL_INPUT
+  // Screenshot tooling: let the host synthesise a button press over serial so
+  // the UI can be driven without a finger on the device. Guarded by the
+  // INKAGENT_SERIAL_INPUT build flag and absent from a normal build.
+  //
+  // A queued press is replayed as a real one: one update() where the button
+  // reads as pressed (and edges as just-pressed), the next where it reads as
+  // just-released. Anything reading through HalGPIO therefore cannot tell the
+  // difference, which is the point -- MappedInputManager and the activities
+  // need no knowledge of this path.
+  void injectPress(uint8_t buttonIndex);
+
+ private:
+  static constexpr uint8_t kInjectQueueLen = 8;
+  static constexpr uint8_t kNoInject = 0xFF;
+  uint8_t injectQueue[kInjectQueueLen] = {};
+  uint8_t injectQueued = 0;
+  uint8_t injectButton = kNoInject;
+  // 0 idle, 1 button is down this frame, 2 button released this frame
+  uint8_t injectPhase = 0;
+  void advanceInjection();
+  bool injectedPressed(uint8_t buttonIndex) const { return injectPhase == 1 && injectButton == buttonIndex; }
+  bool injectedReleased(uint8_t buttonIndex) const { return injectPhase == 2 && injectButton == buttonIndex; }
+
+ public:
+#endif
+
   // Button input methods
   void update();
   bool isPressed(uint8_t buttonIndex) const;

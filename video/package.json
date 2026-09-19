@@ -1,0 +1,24 @@
+{
+  "name": "inkagent-launch-video",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "remotion studio",
+    "render": "remotion render LaunchVideo out/raw.mp4 && sh audio/master.sh",
+    "still": "remotion still LaunchVideo out/frame.png",
+    "render:silent": "remotion render LaunchVideo out/raw.mp4",
+    "audio": "python3 audio/vo.py && python3 audio/score.py",
+    "master": "sh audio/master.sh"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.290",
+    "@remotion/google-fonts": "^4.0.290",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "remotion": "4.0.290"
+  },
+  "devDependencies": {
+    "@types/react": "19.0.0",
+    "typescript": "5.7.3"
+  }
+}

@@ -411,29 +411,31 @@ void setup() {
   // InkAgent field log: USB serial dies once Wi-Fi is up, so relay failures are
   // written to the SD card and replayed here on the next boot (the device
   // restarts after every network activity, cable still attached).
-  for (const char* logPath : {"/.inkagent/inkagent.log", "/.crosspoint/inkagent.log"}) {
+  {
+    constexpr const char* logPath = "/.inkagent/inkagent.log";
     HalFile f;
-    if (!Storage.openFileForRead("INKA", logPath, f)) continue;
-    LOG_INF("INKA", "---- %s ----", logPath);
-    char line[200];
-    size_t n = 0;
-    int c;
-    while ((c = f.read()) >= 0) {
-      if (c == '\n' || n == sizeof(line) - 1) {
-        line[n] = '\0';
-        if (n) LOG_INF("INKA", "%s", line);
-        n = 0;
-        if (c != '\n') line[n++] = static_cast<char>(c);
-      } else {
-        line[n++] = static_cast<char>(c);
+    if (Storage.openFileForRead("INKA", logPath, f)) {
+      LOG_INF("INKA", "---- %s ----", logPath);
+      char line[200];
+      size_t n = 0;
+      int c;
+      while ((c = f.read()) >= 0) {
+        if (c == '\n' || n == sizeof(line) - 1) {
+          line[n] = '\0';
+          if (n) LOG_INF("INKA", "%s", line);
+          n = 0;
+          if (c != '\n') line[n++] = static_cast<char>(c);
+        } else {
+          line[n++] = static_cast<char>(c);
+        }
       }
+      if (n) {
+        line[n] = '\0';
+        LOG_INF("INKA", "%s", line);
+      }
+      f.close();
+      LOG_INF("INKA", "---- end ----");
     }
-    if (n) {
-      line[n] = '\0';
-      LOG_INF("INKA", "%s", line);
-    }
-    f.close();
-    LOG_INF("INKA", "---- end ----");
   }
 
   APP_STATE.loadFromFile();
@@ -654,6 +656,34 @@ void loop() {
     if (line.startsWith("CMD:")) {
       String cmd = line.substring(4);
       cmd.trim();
+#if INKAGENT_SERIAL_INPUT
+      // CMD:KEY:<name> synthesises a button press so screenshot tooling can
+      // walk the UI unattended. Build-flag gated; see HalGPIO::injectPress.
+      if (cmd.startsWith("KEY:")) {
+        String key = cmd.substring(4);
+        key.trim();
+        key.toUpperCase();
+        struct KeyName {
+          const char* name;
+          uint8_t index;
+        };
+        static const KeyName kKeys[] = {
+            {"BACK", HalGPIO::BTN_BACK},   {"CONFIRM", HalGPIO::BTN_CONFIRM}, {"LEFT", HalGPIO::BTN_LEFT},
+            {"RIGHT", HalGPIO::BTN_RIGHT}, {"UP", HalGPIO::BTN_UP},           {"DOWN", HalGPIO::BTN_DOWN},
+            {"POWER", HalGPIO::BTN_POWER},
+        };
+        bool matched = false;
+        for (const auto& k : kKeys) {
+          if (key == k.name) {
+            gpio.injectPress(k.index);
+            logSerial.printf("KEY_OK:%s\n", k.name);
+            matched = true;
+            break;
+          }
+        }
+        if (!matched) logSerial.printf("KEY_ERR:%s\n", key.c_str());
+      }
+#endif
       if (cmd == "SCREENSHOT") {
         const uint32_t bufferSize = display.getBufferSize();
         logSerial.printf("SCREENSHOT_START:%d\n", bufferSize);

@@ -1,0 +1,62 @@
+name: Board support request
+description: Ask for, or offer to do, a port to an ESP32 e-ink reader InkAgent does not run on.
+labels: [board-support]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        Device differences live behind the HAL / SDK boundary as **capabilities**
+        (panel size, touch controller, frontlight, gyro, RTC), not as build
+        flags. A port is mostly a `BoardConfig` profile plus whatever driver is
+        genuinely new. See `firmware/docs/contributing/architecture.md`.
+
+        Realistically, a port needs someone who owns the board. Say whether that
+        is you — it is the single thing that decides whether this happens.
+
+  - type: input
+    id: device
+    attributes:
+      label: Device
+      placeholder: "Make, model, and where it is sold"
+    validations: { required: true }
+
+  - type: input
+    id: mcu
+    attributes:
+      label: MCU, flash, PSRAM
+      placeholder: "ESP32-S3, 16MB flash, 8MB PSRAM"
+    validations: { required: true }
+
+  - type: input
+    id: panel
+    attributes:
+      label: Panel and controller
+      placeholder: "4.2in 400x300, SSD1683"
+
+  - type: textarea
+    id: caps
+    attributes:
+      label: Capabilities
+      placeholder: |
+        Touch controller: GT911 / FT6336 / none
+        Buttons: …
+        Frontlight: yes/no
+        RTC: …
+        SD: SPI or native SDMMC
+        USB: CDC only, or CDC + MSC
+
+  - type: dropdown
+    id: hardware
+    attributes:
+      label: Do you own this device and can you test on it?
+      options:
+        - "Yes — I own one and can flash and test"
+        - "Yes — and I intend to do the port myself"
+        - "No — this is a request"
+    validations: { required: true }
+
+  - type: textarea
+    id: refs
+    attributes:
+      label: Datasheets, pinouts, existing firmware
+      description: Anything that documents the hardware. Vendor firmware teardowns count.
