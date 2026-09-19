@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  host-tests:
+    name: Firmware host tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure
+        run: cmake -S firmware/test -B firmware/build/test -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build firmware/build/test --parallel
+      - name: Test
+        run: ctest --test-dir firmware/build/test --output-on-failure
+
+  relay:
+    name: Relay tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Relay suite
+        working-directory: relay
+        run: npm test
+
+  evals:
+    name: Offline evals
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # Offline only. The --live suites need a provider key and are not run here.
+      - name: Eval suites
+        working-directory: evals
+        run: npm run eval
+
+  format:
+    name: clang-format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clang-format 21
+        run: |
+          wget -qO- https://apt.llvm.org/llvm.sh | sudo bash -s -- 21
+          sudo apt-get install -y clang-format-21
+      - name: Check formatting
+        working-directory: firmware
+        run: |
+          ./bin/clang-format-fix
+          git diff --exit-code || {
+            echo "::error::clang-format made changes. Run ./bin/clang-format-fix and commit."
+            exit 1
+          }
+
+  build:
+    name: Build ${{ matrix.env }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # inkagent-check compiles the [env:default] sources without the custom
+        # SDK rebuild, which is what makes a firmware compile viable in CI.
+        env: [inkagent-check, sticky, x4pro, x4c, papermono]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            firmware/.cache
+          key: pio-${{ matrix.env }}-${{ hashFiles('firmware/platformio.ini') }}
+          restore-keys: pio-${{ matrix.env }}-
+      - name: Install PlatformIO
+        run: pip install --upgrade platformio
+      - name: Build
+        working-directory: firmware
+        run: pio run -e ${{ matrix.env }}

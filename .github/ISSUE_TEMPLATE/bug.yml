@@ -1,0 +1,88 @@
+name: Bug report
+description: Something on the device or the relay does not behave as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: >-
+        The board and firmware version answer most of the follow-up questions,
+        so they are required. Both are on **Settings › System › About**.
+
+  - type: dropdown
+    id: board
+    attributes:
+      label: Board
+      options:
+        - Xteink X3
+        - Xteink X4
+        - Xteink X4 Classic
+        - Xteink X4 Pro
+        - Seeed Sticky
+        - M5Stack Paper Mono
+        - Simulator (device-sim)
+        - Other / not sure
+    validations: { required: true }
+
+  - type: input
+    id: version
+    attributes:
+      label: Firmware version
+      description: From Settings › System › About — includes the branch and short SHA.
+      placeholder: "0.1.0-x4pro (main, 553cc3f)"
+    validations: { required: true }
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Reader (EPUB/TXT/XTC rendering, typography, pagination)
+        - Agent (Ask, Question me on this, Engage screens)
+        - Relay (pairing, /v1/*, dashboard, self-hosting)
+        - Library and transfer (Wi-Fi, USB, Calibre, OPDS, KOReader, peer send)
+        - Words, Highlights, Read-later, Analytics
+        - Sleep screen / power
+        - Settings, OTA, web server
+        - Build, flashing, or bricked device
+        - Other
+    validations: { required: true }
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected instead
+    validations: { required: true }
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a book from …
+        2. Toolbar → Ask → Question me on this
+        3. …
+    validations: { required: true }
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Field log or serial output
+      description: >-
+        Serial dies once Wi-Fi is up, so for anything network-related the SD
+        field log is the useful one. Paste the relevant lines, not the whole file.
+      render: text
+
+  - type: input
+    id: relay
+    attributes:
+      label: Relay
+      description: Hosted (relay.inkagent.dev), self-hosted, or not involved.
+      placeholder: hosted
+
+  - type: textarea
+    id: book
+    attributes:
+      label: Sample file
+      description: >-
+        For a rendering bug, the EPUB or a cut-down file that shows it is worth
+        more than any description. Attach it if the licence allows.
