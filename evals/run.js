@@ -8,6 +8,13 @@ import { createServer } from 'node:http';
 import { createApp } from '../relay/src/server.js';
 import { DeviceClient, layoutForPanel } from '../device-sim/client.js';
 
+// The rig builds its own throwaway in-memory relay and has to create an account
+// on it. INK_SIGNUP_CLOSED is an operator setting for a deployed relay — the
+// README tells you to set it once your account exists — and inheriting it here
+// would close signup on a database that has no accounts at all, so the evals
+// would fail on exactly the machines that follow the deployment advice.
+delete process.env.INK_SIGNUP_CLOSED;
+
 const LIVE = process.argv.includes('--live');
 const VERBOSE = process.argv.includes('-v');
 const BUDGET = 1536, MAX_PAGES = 2, MAX_WORDS = Math.floor(BUDGET / 6);
@@ -38,7 +45,16 @@ async function relay() {
   const app = createApp({ dbPath: ':memory:', publicUrl: 'http://relay.eval' });
   await new Promise(r => app.server.listen(0, r));
   const base = `http://127.0.0.1:${app.server.address().port}`;
-  const login = async (email) => { const r = await fetch(base + '/login', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ email }), redirect: 'manual' }); return r.headers.get('set-cookie').split(';')[0]; };
+  // Sign-up, not sign-in: the relay takes an email and a scrypt-hashed password
+  // (routes/dashboard.js 'POST /signup'), and this rig starts on an empty
+  // in-memory database, so there is no account to sign in to yet. Signing up
+  // sets the session cookie in the same response a login would have.
+  const login = async (email, password = 'eval-password') => {
+    const r = await fetch(base + '/signup', { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ email, password }), redirect: 'manual' });
+    const cookie = r.headers.get('set-cookie');
+    if (!cookie) throw new Error(`relay refused the eval account (${r.status}): ${(await r.text()).replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160)}`);
+    return cookie.split(';')[0];
+  };
   const form = (cookie, path, fields) => fetch(base + path, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded', cookie }, body: new URLSearchParams(fields), redirect: 'manual' });
   return { app, base, login, form, close: () => { app.server.closeAllConnections(); app.server.close(); } };
 }
