@@ -50,11 +50,24 @@ cd evals && npm run eval       # add --live for a real provider, needs a key
 ```
 
 All four run in CI on every pull request, along with a compile of each board
-image and a `clang-format` check.
+image and a `clang-format` check. The `sticky` image is non-blocking for now —
+it flakes on a packaging conflict between the two sources that both supply
+SCons, not on anything in the firmware.
 
 ## Building firmware
 
-Prerequisites, and the `clang-format` 21 install if you need it, are in
+Both build tools are pinned to an exact version, and CI installs the same two:
+
+```sh
+pip install "platformio==6.1.19" "clang-format==21.1.2"
+```
+
+Newer is not better here. PlatformIO 6.2 pulls an SCons that breaks the board
+images which rebuild the Arduino core, and clang-format reformats differently on
+each major version — on 23 you would reformat the tree and CI would reformat it
+back. `./bin/clang-format-fix` refuses anything but 21 and says so.
+
+The rest of the prerequisites are in
 [`firmware/docs/contributing/getting-started.md`](firmware/docs/contributing/getting-started.md).
 
 Pick the environment for your board:
@@ -137,7 +150,7 @@ name the file to start in and how to test the result.
 
 ## Before you build something large
 
-Read [`SCOPE.md`](SCOPE.md). It says what InkAgent is for and, more usefully,
+Read [`firmware/SCOPE.md`](firmware/SCOPE.md). It says what InkAgent is for and, more usefully,
 what it deliberately will not have. Several of the non-goals are the *point* of
 the project rather than things nobody got round to — notably that the agent
 never answers its own question, and that reading is never gamified. A PR adding

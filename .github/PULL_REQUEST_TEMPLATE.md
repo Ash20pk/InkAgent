@@ -22,7 +22,7 @@
 ## Checks
 
 - [ ] Formatted (`cd firmware && ./bin/clang-format-fix`), or the repo hooks are enabled
-- [ ] Within scope — see `SCOPE.md`, particularly the non-goals
+- [ ] Within scope — see `firmware/SCOPE.md`, particularly the non-goals
 - [ ] Flash and RAM impact considered; if it is not trivial, the numbers are below
 - [ ] Anything that changes what leaves the device is reflected in
       Settings › InkAgent › *What leaves this device*

@@ -1,5 +1,7 @@
 # InkAgent
 
+[![CI](https://github.com/Ash20pk/InkAgent/actions/workflows/ci.yml/badge.svg)](https://github.com/Ash20pk/InkAgent/actions/workflows/ci.yml)
+
 An agentic e-reader. InkAgent is firmware for the Xteink X3, the X4 Classic and
 X4 Pro, the Seeed Sticky and the M5Stack Paper Mono, plus the relay it talks to.
 X3 and X4 share one image; the other boards have their own. Within an image the
@@ -20,12 +22,14 @@ or your own agent. The device only ever holds a pairing token. Keys and traces
 live on the relay you run, or the hosted one at `relay.inkagent.dev`.
 
 ```
-firmware/       device firmware (PlatformIO, ESP32-C3), host tests under firmware/test
+firmware/       device firmware (PlatformIO, ESP32-C3 and -S3), host tests under firmware/test
 firmware/examples/apps/   example manifest apps, ready to copy onto a card
+firmware/patches/         changes to the freeink-sdk submodule, reapplied at build time
 relay/          Node 22, zero dependencies: pairing, agent, app hosting, auth, dashboard
 deploy/         Docker Compose + Caddy for a hosted relay with automatic HTTPS
 device-sim/     simulator that speaks the exact device protocol
 evals/          offline evals (protocol, fit, quality rubric, resilience); --live for a real model
+.github/        CI (tests, format, a build per board) and the tagged release build
 PROTOCOL.md     device ↔ relay contract v1
 ```
 
@@ -219,15 +223,34 @@ Then pair it against the hosted relay at `relay.inkagent.dev`, or run your own
 
 ## Firmware
 
-Needs PlatformIO under Python ≥ 3.10.
+Two versions are pinned rather than floored, and CI installs the same two:
+
+```
+pip install "platformio==6.1.19" "clang-format==21.1.2"
+```
+
+PlatformIO 6.2 pulls an SCons whose Fortran tool modules import a module SCons
+removed in 4.9, which breaks the environments that rebuild the Arduino core.
+clang-format's output changes between major versions, so a floor means a
+contributor on 23 and CI on 21 reformat the tree past each other forever.
 
 ```
 cd firmware
 pio run -e inkagent-check             # compile check without the IDF heap-tuning rebuild
-pio run -e default -t upload          # flash the ESP32-C3 image
+pio run -e default -t upload          # flash the X3 / X4 image
 cmake -S test -B build/test && cmake --build build/test && ctest --test-dir build/test
 ./bin/clang-format-fix -g             # format changed files
 ```
+
+One environment per board: `default` (X3, X4), `x4c`, `x4pro`, `sticky`,
+`papermono`, each with a `*-gh_release` twin that the release workflow builds.
+
+`patches/` carries changes to the `freeink-sdk` submodule, reapplied to its
+working tree on every build by `scripts/patch_freeink_sdk.py`. The SDK lives in
+a repository we do not control, so a change we depend on cannot be committed
+there and picked up by bumping the pointer — without this the firmware does not
+compile from a clean checkout. Each patch is a stopgap until it lands upstream;
+`patches/README.md` says what is carried and why.
 
 Back up the stock flash first: `esptool --port <port> read-flash 0 0x1000000 stock.bin`.
 
@@ -308,11 +331,19 @@ cover. [`CONTRIBUTING.md`](CONTRIBUTING.md) says which is which and how to run
 each suite; [`firmware/docs/contributing/`](firmware/docs/contributing/) has the
 architecture and the workflow.
 
-Before building something large, read [`SCOPE.md`](SCOPE.md) — several of the
+Before building something large, read [`firmware/SCOPE.md`](firmware/SCOPE.md) — several of the
 non-goals are the point of the project rather than gaps. Open a
 [Discussion](https://github.com/Ash20pk/InkAgent/discussions) if an idea is near
 a line. Security reports go through [`SECURITY.md`](SECURITY.md), not the issue
 tracker.
+
+Every pull request runs the firmware host tests, the relay suite, the offline
+evals, a `clang-format` check, and a compile of each board image. The `sticky`
+build is currently non-blocking: it fails intermittently on a conflict between
+the two packages that both supply SCons, which is understood well enough to know
+it is not the firmware — it builds locally and passes CI most runs — but not yet
+well enough to fix. It still runs and still reports, and goes back to blocking
+once it is stable.
 
 ## Credits and license
 

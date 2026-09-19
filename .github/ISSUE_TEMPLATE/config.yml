@@ -3,7 +3,7 @@ contact_links:
   - name: Question, idea, or "is this in scope?"
     url: https://github.com/Ash20pk/InkAgent/discussions
     about: >-
-      Discussions first for anything open-ended. SCOPE.md says what the project
+      Discussions first for anything open-ended. firmware/SCOPE.md says what the project
       will and will not take; if your idea is near a line, ask before building.
   - name: Security report
     url: https://github.com/Ash20pk/InkAgent/security/advisories/new

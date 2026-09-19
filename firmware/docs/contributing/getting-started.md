@@ -4,12 +4,17 @@ This guide helps you build and run InkAgent locally.
 
 ## Prerequisites
 
-- PlatformIO Core (`pio`) or VS Code + PlatformIO IDE
-- Python 3.8+
-- `clang-format` **exactly 21** — `pip install clang-format==21.1.2`
+- **PlatformIO Core exactly 6.1.19** and **clang-format exactly 21** —
+  `pip install "platformio==6.1.19" "clang-format==21.1.2"`
+- Python 3.11 is what CI uses; 3.8+ works
 - USB-C cable
 - An InkAgent-supported reader for hardware testing (X3, X4, X4 Classic,
   X4 Pro, Seeed Sticky, M5Stack Paper Mono)
+
+PlatformIO is pinned because 6.2 requires an SCons whose Fortran tool modules
+import `SCons.Tool.FortranCommon`, removed in SCons 4.9 — the environments that
+rebuild the Arduino core load those tools and die at link. 6.1.19 pulls SCons
+4.8.1, which still has it.
 
 The clang-format version is pinned rather than a floor because its output
 changes between major versions: on 22 or 23 you would reformat the tree and CI,
