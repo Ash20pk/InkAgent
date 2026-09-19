@@ -1,0 +1,102 @@
+{
+  "voice": "Daniel",
+  "rate": 172,
+  "lines": [
+    {
+      "t": 0.9,
+      "text": "InkAgent. Firmware for the Xteink readers."
+    },
+    {
+      "t": 3.7,
+      "text": "Not an app. The whole device."
+    },
+    {
+      "t": 5.7,
+      "text": "The agent lives in the firmware."
+    },
+    {
+      "t": 7.6,
+      "text": "And the first thing it offers is, question me on this."
+    },
+    {
+      "t": 11.3,
+      "text": "What comes back is a question."
+    },
+    {
+      "t": 13.2,
+      "text": "Answering is forbidden."
+    },
+    {
+      "t": 14.7,
+      "text": "Because reading with a chatbot tests worse than reading alone."
+    },
+    {
+      "t": 18.5,
+      "text": "Being asked is what holds."
+    },
+    {
+      "t": 20.5,
+      "text": "It also reads how you read. From page turns alone."
+    },
+    {
+      "t": 24.0,
+      "text": "How often you went back, and your pace."
+    },
+    {
+      "t": 26.9,
+      "text": "Two numbers, and nothing else."
+    },
+    {
+      "t": 29.3,
+      "text": "Underneath, a serious reader."
+    },
+    {
+      "t": 32.4,
+      "text": "An offline dictionary."
+    },
+    {
+      "t": 34.1,
+      "text": "Your own fonts."
+    },
+    {
+      "t": 36.2,
+      "text": "Tilt to turn the page."
+    },
+    {
+      "t": 38.2,
+      "text": "Calibre, and KOReader sync."
+    },
+    {
+      "t": 40.5,
+      "text": "Reader to reader, with nothing in between."
+    },
+    {
+      "t": 43.4,
+      "text": "Every word you look up comes back."
+    },
+    {
+      "t": 46.3,
+      "text": "Your highlights in one list. An inbox that empties."
+    },
+    {
+      "t": 49.6,
+      "text": "And the sleep screen spends itself on your book."
+    },
+    {
+      "t": 52.5,
+      "text": "Apps are a JSON file on the card."
+    },
+    {
+      "t": 55.9,
+      "text": "It appears in the drawer. No firmware build."
+    },
+    {
+      "t": 58.6,
+      "text": "And nothing here can follow you into a book."
+    },
+    {
+      "t": 61.1,
+      "text": "InkAgent. Bring your own model."
+    }
+  ]
+}
